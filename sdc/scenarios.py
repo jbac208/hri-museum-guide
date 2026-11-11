@@ -96,4 +96,36 @@ def s1_one_stop() -> Scenario:
                     robot_speech=robot_speech, visitors=visitors, labels=labels)
 
 
+def s1_closed():
+    """s1 for the closed-loop sim. Same people and scripted behaviour, except:
+    v2 edges in at 50-60 s but only gets into the formation if the robot opens it (join_xy);
+    all questions are reactive: the child interrupts the robot's next utterance after 70 s,
+    the parent waits for gaps. Hidden interests decide who takes up which addition."""
+    from .sim import SimSpec, SimSpeech
+    scn = s1_one_stop()
+    scn.name = "s1_closed"
+    v = {x.track_id: x for x in scn.visitors}
+    v2_behind, v2_edge, v2_side = _arc(-95, 3.0), _arc(-95, 2.75), _arc(-80, 2.0)
+    v["v2"].path = [(0, *v2_behind), (50, *v2_behind), (60, *v2_edge)]
+    v["v2"].windows = [w for w in v["v2"].windows if w.attention != "robot"]
+    v["v3"].windows = [w for w in v["v3"].windows if w.attention != "robot"]
+    scn.labels = []   # closed-loop timing depends on the robot; tests check behaviour instead
+    return SimSpec(
+        scn,
+        interests={"v1": {("feature_interest", "figurehead.carving"), ("depth", "figurehead")},
+                   "v2": {("feature_interest", "figurehead.carving")},
+                   "v3": {("feature_interest", "figurehead.paint")},
+                   "v4": {("feature_interest", "figurehead.paint")},
+                   "v5": {("exhibit_interest", "ship_model")},
+                   "v6": set()},
+        join_xy={"v2": v2_side},
+        speech={"v2": [SimSpeech(70, 1.5, "Is that a lady?", mode="interrupt")],
+                "v3": [SimSpeech(100, 2.5, "Is that the original paint?"),
+                       SimSpeech(112, 2.0, "How old is it?"),
+                       SimSpeech(125, 2.0, "Who carved it?"),
+                       SimSpeech(138, 2.0, "Was it on a real ship?")]},
+    )
+
+
 ALL = {"s1_one_stop": s1_one_stop}
+SIM = {"s1_closed": s1_closed}
