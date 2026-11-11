@@ -1,0 +1,68 @@
+{
+  "exhibit": "compass",
+  "note": "Mock content for the prototype. The ship and its history are invented.",
+  "core": [
+    {
+      "id": "compass.core.1",
+      "text": "This is the Marigold's compass. It sat in a wooden stand in front of the ship's wheel, so the person steering could always see it.",
+      "cues": [{"word": "compass", "look": "exhibit:compass", "gesture": "open_hand"}]
+    },
+    {
+      "id": "compass.core.2",
+      "text": "The dial floats in a bowl of liquid, so it stays level and steady even when the ship rolls in heavy seas. The liquid was partly alcohol, so it would not freeze.",
+      "cues": [{"word": "dial", "look": "feature:compass.dial", "gesture": "point"},
+               {"word": "level", "look": "feature:compass.dial"}]
+    },
+    {
+      "id": "compass.core.3",
+      "text": "Out of sight of land, the compass, a clock and a few careful sums were all the crew had to know where they were.",
+      "cues": [{"word": "compass", "look": "feature:compass.dial"}]
+    }
+  ],
+  "open_question": {"text": "How do you think they steered at night?", "look": "exhibit:compass", "wait_s": 4.0},
+  "additions": [
+    {
+      "id": "compass.add.dial_detail",
+      "type": "detail",
+      "feature": "compass.dial",
+      "text": "Look at the dial: north is marked with a small decorated flower called a fleur-de-lis, a tradition that goes back hundreds of years.",
+      "serves": [{"kind": "feature_interest", "target": "compass.dial"}],
+      "look": "feature:compass.dial"
+    },
+    {
+      "id": "compass.add.iron_depth",
+      "type": "depth",
+      "feature": null,
+      "text": "To go a bit deeper: iron on the ship pulls the needle off true. The two iron balls on either side of the stand were moved until they cancelled that pull out.",
+      "serves": [{"kind": "depth", "target": "compass"}],
+      "look": "exhibit:compass"
+    },
+    {
+      "id": "compass.add.night_detail",
+      "type": "detail",
+      "feature": "compass.dial",
+      "text": "At night a small oil lamp inside the stand lit the dial from below, so whoever was steering could read it without spoiling their night vision.",
+      "serves": [{"kind": "feature_interest", "target": "compass.dial"},
+                 {"kind": "depth", "target": "compass"}],
+      "look": "feature:compass.dial"
+    },
+    {
+      "id": "compass.add.ship_model_preview",
+      "type": "neighbour",
+      "feature": null,
+      "text": "You can see where the compass stood on the model of the Marigold, just in front of the wheel at the back of the ship.",
+      "serves": [{"kind": "exhibit_interest", "target": "ship_model"}],
+      "look": "exhibit:ship_model"
+    }
+  ],
+  "qa": [
+    {"id": "compass.qa.works", "match": ["still work", "does it work", "working"],
+     "text": "It does. The needle still points north, more than 170 years later.",
+     "look": "feature:compass.dial"},
+    {"id": "compass.qa.liquid", "match": ["liquid", "water", "alcohol", "float"],
+     "text": "It's a mix of water and alcohol. The alcohol stops it freezing, and the liquid damps the swing of the dial.",
+     "look": "feature:compass.dial"}
+  ],
+  "qa_fallback": {"text": "That's a good question, and I don't know the answer. What we do know is that this compass guided the Marigold for almost thirty years.",
+                  "look": "exhibit:compass"}
+}

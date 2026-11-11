@@ -1,0 +1,103 @@
+{
+  "exhibit": "figurehead",
+  "note": "Mock content for the prototype. The ship and its history are invented.",
+  "core": [
+    {
+      "id": "figurehead.core.1",
+      "text": "This is the figurehead of the Marigold, a merchant ship built in 1852. A figurehead sat at the very front of a ship, just under the bowsprit, and it was the first thing anyone saw as the ship came into harbour.",
+      "cues": [{"word": "figurehead", "look": "exhibit:figurehead", "gesture": "open_hand"},
+               {"word": "front", "look": "exhibit:figurehead"}]
+    },
+    {
+      "id": "figurehead.core.2",
+      "text": "Sailors believed a figurehead watched the sea ahead and kept the crew safe. Many figureheads showed a woman, and this one is thought to show the shipowner's daughter, who named the ship.",
+      "cues": [{"word": "watched", "look": "feature:figurehead.carving"},
+               {"word": "woman", "look": "feature:figurehead.carving", "gesture": "point"}]
+    },
+    {
+      "id": "figurehead.core.3",
+      "text": "She was carved by hand from a single block of timber. Look at the face: the carver cut the eyes deep so they would still read as eyes from a distance, out on the water.",
+      "cues": [{"word": "carved", "look": "feature:figurehead.carving"},
+               {"word": "face", "look": "feature:figurehead.carving", "gesture": "point"}]
+    },
+    {
+      "id": "figurehead.core.4",
+      "text": "She was painted in bright colours, and the paint was renewed almost every voyage because salt water wore it away. Some of what you see here is paint from her working life.",
+      "cues": [{"word": "painted", "look": "feature:figurehead.paint", "gesture": "point"},
+               {"word": "salt", "look": "exhibit:figurehead"}]
+    }
+  ],
+  "open_question": {"text": "What do you notice about her face?", "look": "feature:figurehead.carving",
+                    "wait_s": 4.0},
+  "additions": [
+    {
+      "id": "figurehead.add.carving_detail",
+      "type": "detail",
+      "feature": "figurehead.carving",
+      "text": "One more thing about the carving: if you look closely at the hair, you can still see the gouge marks, each one a single cut of the chisel.",
+      "serves": [{"kind": "feature_interest", "target": "figurehead.carving"}],
+      "look": "feature:figurehead.carving"
+    },
+    {
+      "id": "figurehead.add.paint_detail",
+      "type": "detail",
+      "feature": "figurehead.paint",
+      "text": "Conservators found eleven layers of paint on her. The red on the lips is the oldest layer that survives, and it is about 170 years old.",
+      "serves": [{"kind": "feature_interest", "target": "figurehead.paint"}],
+      "look": "feature:figurehead.paint"
+    },
+    {
+      "id": "figurehead.add.making_depth",
+      "type": "depth",
+      "feature": null,
+      "text": "A little more on how she was made: the carver first drew her full size on the timber, roughed out the shape with an axe, and only then moved to chisels. A figurehead like this took about three months.",
+      "serves": [{"kind": "depth", "target": "figurehead"},
+                 {"kind": "feature_interest", "target": "figurehead.carving"}],
+      "look": "exhibit:figurehead"
+    },
+    {
+      "id": "figurehead.add.conservation_depth",
+      "type": "depth",
+      "feature": "figurehead.paint",
+      "text": "To go a bit deeper: when she came to the museum she was cracked from years of sun and spray. Rather than repaint her, conservators stabilised what was left, so the marks of her working life stay visible.",
+      "serves": [{"kind": "depth", "target": "figurehead"},
+                 {"kind": "feature_interest", "target": "figurehead.paint"}],
+      "look": "feature:figurehead.paint"
+    },
+    {
+      "id": "figurehead.add.ship_model_preview",
+      "type": "neighbour",
+      "feature": null,
+      "text": "If you'd like to see where she sat, the model just over there shows the Marigold herself, with the figurehead in place under the bowsprit.",
+      "serves": [{"kind": "exhibit_interest", "target": "ship_model"}],
+      "look": "exhibit:ship_model"
+    },
+    {
+      "id": "figurehead.add.compass_preview",
+      "type": "neighbour",
+      "feature": null,
+      "text": "The figurehead watched the sea, but the crew trusted something else to find their way. The navigator's compass from the same ship is on the other side of the room.",
+      "serves": [{"kind": "exhibit_interest", "target": "compass"}],
+      "look": "exhibit:compass"
+    }
+  ],
+  "qa": [
+    {"id": "figurehead.qa.who", "match": ["lady", "woman", "who is she", "who is it", "girl"],
+     "text": "She's thought to be the shipowner's daughter, the person the ship was named after.",
+     "look": "feature:figurehead.carving"},
+    {"id": "figurehead.qa.paint", "match": ["paint", "colour", "color", "original"],
+     "text": "Partly. The red on the lips is original, from about 1852. Most of the rest was repainted during her working life.",
+     "look": "feature:figurehead.paint"},
+    {"id": "figurehead.qa.age", "match": ["how old", "age", "when"],
+     "text": "She was carved in 1852, so she's about 175 years old.",
+     "look": "exhibit:figurehead"},
+    {"id": "figurehead.qa.carver", "match": ["who carved", "who made", "carver", "made it"],
+     "text": "We don't know the carver's name. Figurehead carvers rarely signed their work, though the style suggests a workshop near the harbour where the ship was built.",
+     "look": "feature:figurehead.carving"},
+    {"id": "figurehead.qa.real_ship", "match": ["real ship", "on a ship", "ship", "sail"],
+     "text": "Yes. She sailed on the Marigold for nearly thirty years, carrying timber and grain, before the ship was broken up.",
+     "look": "exhibit:ship_model"}
+  ],
+  "qa_fallback": {"text": "That's a good question, and I don't know the answer. I can say what we do know: she was carved in 1852 and sailed for almost thirty years.",
+                  "look": "exhibit:figurehead"}
+}

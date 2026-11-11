@@ -88,3 +88,6 @@ SEED_LAYER_CONF = 0.3           # pending layers handed over in the start impres
 PENDING_WEIGHT = 0.5            # a pending layer counts PENDING_WEIGHT * confidence toward s_i(a); confirmed counts 1
 LAMBDA_DOMINANCE = 0.5          # D8: w_i = 1 / (1 + LAMBDA_DOMINANCE * k_i)
 POINT_ASK_REOPENS_RESCINDED = True  # an explicit question re-confirms a rescinded layer (the visitor asked; robot isn't pushing)
+
+# ---------------------------------------------------------------- content (block 6)
+TTS_WORDS_PER_S = 2.5           # speech duration estimate for scripts and additions

@@ -1,0 +1,81 @@
+{
+  "exhibit": "ship_model",
+  "note": "Mock content for the prototype. The ship and its history are invented.",
+  "core": [
+    {
+      "id": "ship_model.core.1",
+      "text": "This is a model of the Marigold, the ship the figurehead came from. It was built at one forty-eighth of the real size by a shipwright who had worked on the ship itself.",
+      "cues": [{"word": "model", "look": "exhibit:ship_model", "gesture": "open_hand"},
+               {"word": "shipwright", "look": "feature:ship_model.hull"}]
+    },
+    {
+      "id": "ship_model.core.2",
+      "text": "The Marigold was a three-masted barque. She carried timber and grain across the Atlantic with a crew of about fourteen, and a crossing took around five weeks.",
+      "cues": [{"word": "three-masted", "look": "feature:ship_model.rigging", "gesture": "point"},
+               {"word": "crew", "look": "exhibit:ship_model"}]
+    },
+    {
+      "id": "ship_model.core.3",
+      "text": "Every rope on the model is a real, working line, tied the way it would have been on the ship. The sailors had to know each of these by touch, often in the dark.",
+      "cues": [{"word": "rope", "look": "feature:ship_model.rigging", "gesture": "point"}]
+    }
+  ],
+  "open_question": {"text": "Where on the ship do you think the crew slept?", "look": "feature:ship_model.hull",
+                    "wait_s": 4.0},
+  "additions": [
+    {
+      "id": "ship_model.add.rigging_detail",
+      "type": "detail",
+      "feature": "ship_model.rigging",
+      "text": "Here's a detail in the rigging: there are over two hundred separate lines on this model, and each sail needed four or five of them just to raise it.",
+      "serves": [{"kind": "feature_interest", "target": "ship_model.rigging"}],
+      "look": "feature:ship_model.rigging"
+    },
+    {
+      "id": "ship_model.add.hull_detail",
+      "type": "detail",
+      "feature": "ship_model.hull",
+      "text": "Look along the bottom of the hull. The copper colour is copper sheeting, which stopped worms from boring into the wood.",
+      "serves": [{"kind": "feature_interest", "target": "ship_model.hull"}],
+      "look": "feature:ship_model.hull"
+    },
+    {
+      "id": "ship_model.add.building_depth",
+      "type": "depth",
+      "feature": "ship_model.hull",
+      "text": "A little more on how the real ship was built: the frame went up first, like a skeleton, and then planks were steamed so they would bend around it. Building her took about a year.",
+      "serves": [{"kind": "depth", "target": "ship_model"},
+                 {"kind": "feature_interest", "target": "ship_model.hull"}],
+      "look": "feature:ship_model.hull"
+    },
+    {
+      "id": "ship_model.add.figurehead_link",
+      "type": "neighbour",
+      "feature": null,
+      "text": "Right at the front, under the bowsprit, you can see a tiny version of the figurehead we just saw, in her original position.",
+      "serves": [{"kind": "exhibit_interest", "target": "figurehead"}],
+      "look": "exhibit:ship_model"
+    },
+    {
+      "id": "ship_model.add.compass_preview",
+      "type": "neighbour",
+      "feature": null,
+      "text": "The ship's compass sat just in front of the wheel, here at the back. The real one is on display across the room.",
+      "serves": [{"kind": "exhibit_interest", "target": "compass"}],
+      "look": "exhibit:compass"
+    }
+  ],
+  "qa": [
+    {"id": "ship_model.qa.size", "match": ["how big", "size", "long", "real size"],
+     "text": "The real ship was about 40 metres long, so this model is roughly 48 times smaller.",
+     "look": "exhibit:ship_model"},
+    {"id": "ship_model.qa.crew", "match": ["crew", "sailors", "people", "sleep", "slept"],
+     "text": "About fourteen. Most of them slept in hammocks in the front of the ship, below deck.",
+     "look": "feature:ship_model.hull"},
+    {"id": "ship_model.qa.fate", "match": ["what happened", "sink", "sank", "still"],
+     "text": "She was broken up for timber around 1880, after nearly thirty years of sailing. The figurehead was saved.",
+     "look": "exhibit:ship_model"}
+  ],
+  "qa_fallback": {"text": "That's a good question, and I don't know the answer. What we do know is that she sailed for nearly thirty years.",
+                  "look": "exhibit:ship_model"}
+}
