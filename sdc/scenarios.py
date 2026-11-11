@@ -81,12 +81,14 @@ def s1_one_stop() -> Scenario:
         {"kind": "barrier", "track_id": "v2", "t0": 72, "t1": 73.5, "why": "talked over"},
         {"kind": "bid", "track_id": "v2", "t0": 50, "t1": 80},
         {"kind": "excluded", "track_id": "v2", "t0": 50, "t1": 80},
+        {"kind": "point_ask", "track_id": "v2", "t0": 72, "t1": 73.5, "why": "question, talked over"},
         {"kind": "point_ask", "track_id": "v3", "t0": 100, "t1": 102.5, "target": "figurehead.paint"},
         {"kind": "point_ask", "track_id": "v3", "t0": 112, "t1": 114},
         {"kind": "point_ask", "track_id": "v3", "t0": 125, "t1": 127},
         {"kind": "point_ask", "track_id": "v3", "t0": 138, "t1": 140},
         {"kind": "expect_no_events", "track_id": "v4", "t0": 0, "t1": 150},
         {"kind": "drift", "track_id": "v5", "t0": 100, "t1": 140, "target": "ship_model"},
+        {"kind": "barrier", "track_id": "v5", "t0": 140, "t1": 150, "why": "outside formation after the drift"},
         {"kind": "fatigue", "track_id": "v6", "t0": 110, "t1": 150},
     ]
 

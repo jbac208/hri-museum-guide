@@ -44,7 +44,7 @@ APPROACH_OFF_S = 2.0
 # ---------------------------------------------------------------- point / ask
 POINT_MIN_S = 0.5               # pointing must last this long
 POINT_ASK_MERGE_S = 3.0         # a point and a question from the same visitor this close together are one event
-OVERLAPPED_QUESTION_IS_POINT_ASK = False  # a question that was talked over is a bid (+ barrier), not a point/ask
+OVERLAPPED_QUESTION_IS_POINT_ASK = True   # a talked-over question is a bid + barrier AND a point/ask (fix first, then answer)
 
 # ---------------------------------------------------------------- drift (gaze on another exhibit)
 DRIFT_ON_S = 3.0

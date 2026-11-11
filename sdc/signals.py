@@ -3,7 +3,7 @@
 Events (Perception & decision loop §2, D10):
   linger     dwell on one feature of the current stop well above the visitor's own baseline dwell
   approach   standing closer to the exhibit than own baseline, while inside the formation
-  point_ask  pointing at a feature, or a question that got the floor
+  point_ask  pointing at a feature, or a question (a talked-over question is also a bid + barrier)
   drift      gaze resting on another exhibit (unusual for this visitor)
   fatigue    leaning/sitting, or facing away + looking at nothing + standing still (unusual for this visitor)
   bid        edging inward from outside the formation, repeated short robot glances, or speech that was talked over
@@ -288,7 +288,8 @@ class SignalLayer:
         if overlapped and not C.OVERLAPPED_QUESTION_IS_POINT_ASK:
             return []   # handled as bid + talked-over barrier by the tick rules
         target = st.att[8:] if st.att.startswith("feature:") else None
-        return self._point_ask(st, u.t, t_start, target, f'question that got the floor: "{u.text}"')
+        how = "question, talked over" if overlapped else "question that got the floor"
+        return self._point_ask(st, u.t, t_start, target, f'{how}: "{u.text}"')
 
     def _point_ask(self, st, t, t0, target, reason):
         last = st.last_point_ask

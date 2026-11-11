@@ -60,8 +60,8 @@ def test_all_labels_found():
     assert RES["fn"] == [], RES["fn"]
 
 
-def test_talked_over_question_is_not_point_ask():
-    assert of("point_ask", "v2") == []
+def test_talked_over_question_is_bid_barrier_and_point_ask():
+    assert len(of("point_ask", "v2")) == 1
     assert any(e.detail == "talked_over" for e in of("barrier", "v2"))
 
 
