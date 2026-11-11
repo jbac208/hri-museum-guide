@@ -166,83 +166,85 @@ class _GazeProcess:
         return target
 
 
-def generate(scn: Scenario, gallery: dict):
-    rng = random.Random(scn.seed)
-    ex = {e["id"]: e for e in gallery["exhibits"]}
-    feat_xy = {f["id"]: (f["x"], f["y"]) for e in gallery["exhibits"] for f in e["features"]}
-    stop = ex[scn.stop]
-    stop_xy = (stop["x"], stop["y"])
-    rx, ry = scn.robot_pose
+def _speaking_at(speeches, t):
+    for s in speeches:
+        if s.t0 <= t < s.t1:
+            return s
+    return None
 
-    clusters = {}
-    for v in scn.visitors:
-        clusters.setdefault(v.cluster_id, []).append(v.track_id)
-    gaze = {v.track_id: _GazeProcess(rng, v, [c for c in clusters[v.cluster_id] if c != v.track_id],
-                                     [f["id"] for f in stop["features"]], scn.stop)
-            for v in scn.visitors}
 
-    lines = [{"type": "header", "schema_version": schema.SCHEMA_VERSION, "rate_hz": scn.rate_hz,
-              "gallery": gallery["id"], "scenario": scn.name}]
+class World:
+    """Builds schema frames from scripted visitor state. Used by generate() (open loop, scripted robot)
+    and by sim.py (closed loop: robot pose and speech come from the decision layer, and visitors'
+    scripts are edited live as they react)."""
 
-    # start impression (what Jay's half would hand over)
-    pos0 = {v.track_id: _lerp_path(v.path, 0.0) for v in scn.visitors}
-    cx = sum(p[0] for p in pos0.values()) / len(pos0)
-    cy = sum(p[1] for p in pos0.values()) / len(pos0)
-    lines.append({
-        "type": "start_impression", "t": 0.0,
-        "visitors": [{
-            "track_id": v.track_id, "age_class": v.age_class, "age_conf": v.age_conf,
-            "cluster_id": v.cluster_id,
-            "baseline_seed": {
-                "distance_m": round(math.dist(pos0[v.track_id], stop_xy), 2),
-                "robot_glances_per_min": 6.0 if v.age_class == "child" else 4.0,
-                "speech_frac": 0.05,
-            },
-            "pending_layers": v.pending_layers,
-            "responded_to_steer_invite": v.responded_to_steer_invite,
-        } for v in scn.visitors],
-        "group": {"size": len(scn.visitors),
-                  "spread_m": round(max(math.dist(p, (cx, cy)) for p in pos0.values()), 2)},
-    })
+    def __init__(self, scn: Scenario, gallery: dict, rng):
+        self.scn, self.rng = scn, rng
+        self.ex = {e["id"]: e for e in gallery["exhibits"]}
+        self.feat_xy = {f["id"]: (f["x"], f["y"]) for e in gallery["exhibits"] for f in e["features"]}
+        stop = self.ex[scn.stop]
+        self.stop_xy = (stop["x"], stop["y"])
+        self.gallery_id = gallery["id"]
+        clusters = {}
+        for v in scn.visitors:
+            clusters.setdefault(v.cluster_id, []).append(v.track_id)
+        self.gaze = {v.track_id: _GazeProcess(rng, v, [c for c in clusters[v.cluster_id] if c != v.track_id],
+                                              [f["id"] for f in stop["features"]], scn.stop)
+                     for v in scn.visitors}
 
-    def speaking_at(speeches, t):
-        for s in speeches:
-            if s.t0 <= t < s.t1:
-                return s
-        return None
+    def start_lines(self):
+        scn = self.scn
+        header = {"type": "header", "schema_version": schema.SCHEMA_VERSION, "rate_hz": scn.rate_hz,
+                  "gallery": self.gallery_id, "scenario": scn.name}
+        pos0 = {v.track_id: _lerp_path(v.path, 0.0) for v in scn.visitors}
+        cx = sum(p[0] for p in pos0.values()) / len(pos0)
+        cy = sum(p[1] for p in pos0.values()) / len(pos0)
+        si = {
+            "type": "start_impression", "t": 0.0,
+            "visitors": [{
+                "track_id": v.track_id, "age_class": v.age_class, "age_conf": v.age_conf,
+                "cluster_id": v.cluster_id,
+                "baseline_seed": {
+                    "distance_m": round(math.dist(pos0[v.track_id], self.stop_xy), 2),
+                    "robot_glances_per_min": 6.0 if v.age_class == "child" else 4.0,
+                    "speech_frac": 0.05,
+                },
+                "pending_layers": v.pending_layers,
+                "responded_to_steer_invite": v.responded_to_steer_invite,
+            } for v in scn.visitors],
+            "group": {"size": len(scn.visitors),
+                      "spread_m": round(max(math.dist(p, (cx, cy)) for p in pos0.values()), 2)},
+        }
+        return [header, si]
 
-    events = []  # utterances, emitted at speech end
-    for v in scn.visitors:
-        for s in v.speech:
-            events.append({"type": "utterance", "t": round(s.t1, 2), "track_id": v.track_id,
-                           "text": s.text, "is_question": s.is_question,
-                           "duration_s": round(s.t1 - s.t0, 2)})
+    def positions(self, t):
+        return {v.track_id: _lerp_path(v.path, t) for v in self.scn.visitors}
 
-    n = int(scn.duration_s * scn.rate_hz)
-    for i in range(n):
-        t = round(i / scn.rate_hz, 3)
-        robot_sp = speaking_at(scn.robot_speech, t)
-        # true state
+    def frame(self, t, robot_xy, robot_yaw, robot_sp):
+        """robot_sp: the robot's current speech (anything with .t0) or None. robot_yaw None = face the group."""
+        scn, rng, ex = self.scn, self.rng, self.ex
+        rx, ry = robot_xy
         state = {}
         for v in scn.visitors:
             x, y = _lerp_path(v.path, t)
             state[v.track_id] = {"x": x, "y": y, "height": v.height}
-        cx = sum(s["x"] for s in state.values()) / len(state)
-        cy = sum(s["y"] for s in state.values()) / len(state)
-        robot_yaw = _yaw_to(rx, ry, cx, cy)
+        if robot_yaw is None:
+            cx = sum(s["x"] for s in state.values()) / len(state)
+            cy = sum(s["y"] for s in state.values()) / len(state)
+            robot_yaw = _yaw_to(rx, ry, cx, cy)
 
         out = []
         for v in scn.visitors:
             s = state[v.track_id]
             others = [state[o.track_id] for o in scn.visitors if o is not v]
-            w = gaze[v.track_id]._window(t)
-            att = gaze[v.track_id].step(t)
+            w = self.gaze[v.track_id]._window(t)
+            att = self.gaze[v.track_id].step(t)
 
             # head yaw from attention target
             if att == "robot":
                 tx, ty = rx, ry
             elif att.startswith("feature:"):
-                tx, ty = feat_xy[att[8:]]
+                tx, ty = self.feat_xy[att[8:]]
             elif att.startswith("exhibit:"):
                 tx, ty = ex[att[8:]]["x"], ex[att[8:]]["y"]
             elif att.startswith("visitor:"):
@@ -254,14 +256,14 @@ def generate(scn: Scenario, gallery: dict):
 
             bt = w.body_target if w and w.body_target else scn.stop
             if bt == "away":
-                body = _wrap(_yaw_to(s["x"], s["y"], *stop_xy) + math.pi)
+                body = _wrap(_yaw_to(s["x"], s["y"], *self.stop_xy) + math.pi)
             else:
                 body = _yaw_to(s["x"], s["y"], ex[bt]["x"], ex[bt]["y"])
 
-            my_sp = speaking_at(v.speech, t)
+            my_sp = _speaking_at(v.speech, t)
             overlapped = False
             if my_sp:
-                rivals = [robot_sp] + [speaking_at(o.speech, t) for o in scn.visitors if o is not v]
+                rivals = [robot_sp] + [_speaking_at(o.speech, t) for o in scn.visitors if o is not v]
                 overlapped = any(r and r.t0 < my_sp.t0 for r in rivals)
 
             out.append({
@@ -273,9 +275,9 @@ def generate(scn: Scenario, gallery: dict):
                 "attention": att,
                 "speaking": my_sp is not None,
                 "overlapped": overlapped,
-                "los_exhibit": line_of_sight(s, stop_xy, others),
+                "los_exhibit": line_of_sight(s, self.stop_xy, others),
                 "los_robot": line_of_sight(s, (rx, ry), others),
-                "in_formation": FORMATION_RING[0] <= math.dist((s["x"], s["y"]), stop_xy) <= FORMATION_RING[1],
+                "in_formation": FORMATION_RING[0] <= math.dist((s["x"], s["y"]), self.stop_xy) <= FORMATION_RING[1],
                 "cluster_id": v.cluster_id,
                 "age_class": v.age_class,
                 "age_conf": v.age_conf,
@@ -283,10 +285,25 @@ def generate(scn: Scenario, gallery: dict):
                 "pointing_at": (w.pointing_at if w and w.pointing_at else None),
                 "track_conf": round(min(1.0, max(0.5, rng.gauss(0.95, 0.02))), 3),
             })
-        lines.append({"type": "frame", "t": t,
-                      "robot": {"x": rx, "y": ry, "yaw": round(robot_yaw, 3), "speaking": robot_sp is not None},
-                      "visitors": out})
+        return {"type": "frame", "t": t,
+                "robot": {"x": rx, "y": ry, "yaw": round(robot_yaw, 3), "speaking": robot_sp is not None},
+                "visitors": out}
 
+
+def utterance_line(track_id, s):
+    return {"type": "utterance", "t": round(s.t1, 2), "track_id": track_id, "text": s.text,
+            "is_question": s.is_question, "duration_s": round(s.t1 - s.t0, 2)}
+
+
+def generate(scn: Scenario, gallery: dict):
+    """Open loop: scripted visitors, scripted robot speech, robot at scn.robot_pose facing the group."""
+    world = World(scn, gallery, random.Random(scn.seed))
+    lines = world.start_lines()
+    events = [utterance_line(v.track_id, s) for v in scn.visitors for s in v.speech]
+    n = int(scn.duration_s * scn.rate_hz)
+    for i in range(n):
+        t = round(i / scn.rate_hz, 3)
+        lines.append(world.frame(t, scn.robot_pose, None, _speaking_at(scn.robot_speech, t)))
     # merge utterances into the stream in time order (after the header + impression)
     body = lines[2:] + events
     body.sort(key=lambda o: (o["t"], 0 if o["type"] == "frame" else 1))
