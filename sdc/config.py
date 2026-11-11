@@ -110,8 +110,11 @@ ADDITION_THRESHOLD = 0.15       # deliver only if score(a) = Σ w_i·s_i(a) reac
 MAX_ADDITIONS_PER_STOP = 2      # P11
 # uptake monitor (D6)
 UPTAKE_WINDOW_S = 10.0          # after the addition ends
-UPTAKE_LOOK_S = 2.0             # looking at the addition's target for this long (in total) is uptake
+UPTAKE_LOOK_S = 3.0             # one continuous look at the addition's target of at least this long ...
+UPTAKE_DWELL_FACTOR = 2.0       # ... and at least this many times the visitor's own mean dwell is uptake
+UPTAKE_LOOK_GAP_S = 0.3         # glances away shorter than this don't break a look
 UPTAKE_STEP_M = 0.2             # stepping this much closer to the addition's exhibit is uptake
+UPTAKE_SETTLE_SPEED_MPS = 0.04  # ... measured from where they stand once a move already under way slows below this
 CREDIT_PER_ACTED_SIGNAL = 1.0   # k_i grows by this when the robot visibly acts on i's signal (answer, confirmed layer)
 # between-stop planner (§6)
 PACE_FATIGUE_SHARE = 0.3        # slow down if at least this share of the group showed fatigue

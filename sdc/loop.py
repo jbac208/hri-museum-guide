@@ -16,6 +16,7 @@ class Loop:
         self.signals = SignalLayer(gallery, stop, stop_index)
         self.profile = ProfileStore()
         self.ctrl = StopController(stop, self.contents[stop], gallery, self.profile, t_start, duration_s)
+        self.ctrl.dwell_of = lambda tid: (self.signals.v[tid].dwell.value if tid in self.signals.v else None)
         self.stop, self.visited = stop, [stop]
         self._seen = set()
         self.t = t_start
@@ -40,14 +41,14 @@ class Loop:
             self.ctrl.on_utterance(rec)
 
     def finish(self):
+        summary = self.ctrl.end_stop(self.t)          # first: stream end is not a resolution
         self._dispatch(self.signals.finish())
-        summary = self.ctrl.end_stop(self.t)
         self.profile.end_stop(self.t)
         self.plan = plan_next_stop(self.stop, self.gallery, self.profile, self.visited, summary)
         if self.plan["offer_choice"]:
             names = {e["id"]: e["name"].lower() for e in self.gallery["exhibits"]}
             a, b = self.plan["choice"]
-            self.ctrl._act(self.t, "say_to_group", {"text": f"Next we could see the {names[a]} or the {names[b]}.",
+            self.ctrl._act(max(self.t, self.ctrl.busy_until), "say_to_group", {"text": f"Next we could see the {names[a]} or the {names[b]}.",
                                                     "id": "between.choice"},
                            "between stops: two close options, offer the group a two-way choice (P12)")
         return {"summary": summary, "plan": self.plan}

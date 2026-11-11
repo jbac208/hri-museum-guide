@@ -81,39 +81,59 @@ def select_addition(exhibit, profile, used):
 # ---------------------------------------------------------------- uptake monitor (D6)
 
 class UptakeWindow:
-    def __init__(self, addition, t0, t_end, per, gallery, frame):
+    """Uptake = a look at the addition's target (a feature, or another exhibit; not the current stop as a
+    whole) clearly longer than the visitor's own usual dwell, stepping closer to its exhibit, or asking
+    a question, within the window (D6)."""
+
+    def __init__(self, addition, t0, t_end, per, gallery, frame, stop, dwell_of=None):
         self.a, self.t0, self.t_end, self.per = addition, t0, t_end, per
         ex = {e["id"]: e for e in gallery["exhibits"]}
         neighbour = [s["target"] for s in addition.serves if s["kind"] == "exhibit_interest"]
         eid = neighbour[0] if addition.type == "neighbour" and neighbour else addition.exhibit
         self.ex_xy = (ex[eid]["x"], ex[eid]["y"])
-        self.targets = {addition.look}
+        # looking at the current stop as a whole is what everyone does anyway, so it isn't uptake
+        self.targets = {addition.look} - {f"exhibit:{stop}"}
         for s in addition.serves:
             if s["kind"] == "feature_interest":
                 self.targets.add(f"feature:{s['target']}")
-            else:
+            elif s["target"] != stop:          # another exhibit: looking anywhere at it counts
                 self.targets.add(f"exhibit:{s['target']}")
                 self.targets |= {f"feature:{f['id']}" for f in ex[s["target"]]["features"]}
-        self.look = {tid: 0.0 for tid in per}
-        self.d0 = {tid: self._dist(frame.visitors[tid]) for tid in per if frame and tid in frame.visitors}
+        dwell_of = dwell_of or (lambda tid: None)
+        self.need = {tid: max(C.UPTAKE_LOOK_S, C.UPTAKE_DWELL_FACTOR * (dwell_of(tid) or 0.0)) for tid in per}
+        self.run0, self.last_in, self.best = {}, {}, {tid: 0.0 for tid in per}
+        # stepping closer is measured from where they stand once any move already under way has settled
+        self.d_ref, self.settled, self.trail = {}, set(), {tid: [] for tid in per}
         self.closer, self.asked = set(), set()
-        self.last_t = None
 
     def _dist(self, o):
         return math.hypot(o.x - self.ex_xy[0], o.y - self.ex_xy[1])
 
     def on_frame(self, f):
-        dt = (f.t - self.last_t) if self.last_t is not None else 0.0
-        self.last_t = f.t
-        if f.t < self.t0:
-            return
+        live = f.t >= self.t0     # the movement trail starts when the addition is chosen, evidence when it's said
         for tid in self.per:
             o = f.visitors.get(tid)
             if o is None:
                 continue
-            if o.attention in self.targets:
-                self.look[tid] += dt
-            if tid in self.d0 and self.d0[tid] - self._dist(o) >= C.UPTAKE_STEP_M:
+            if live and o.attention in self.targets:
+                if tid not in self.run0 or f.t - self.last_in[tid] > C.UPTAKE_LOOK_GAP_S:
+                    self.run0[tid] = f.t
+                self.last_in[tid] = f.t
+                self.best[tid] = max(self.best[tid], f.t - self.run0[tid])
+            d = self._dist(o)
+            tr = self.trail[tid]
+            tr.append((f.t, d))
+            while tr and tr[0][0] < f.t - 2.0:
+                tr.pop(0)
+            span = tr[-1][0] - tr[0][0]
+            if tid not in self.settled:
+                self.d_ref[tid] = d
+                if span >= 1.9:   # radial speed from the means of the first and last thirds of the last 2 s
+                    k = max(1, len(tr) // 3)
+                    v = (sum(x[1] for x in tr[:k]) - sum(x[1] for x in tr[-k:])) / k / (span * 2 / 3)
+                    if v <= C.UPTAKE_SETTLE_SPEED_MPS:
+                        self.settled.add(tid)
+            elif live and self.d_ref[tid] - d >= C.UPTAKE_STEP_M:
                 self.closer.add(tid)
 
     def on_utterance(self, u):
@@ -122,8 +142,9 @@ class UptakeWindow:
 
     def evidence(self, tid):
         why = []
-        if self.look.get(tid, 0) >= C.UPTAKE_LOOK_S:
-            why.append(f"looked at it {self.look[tid]:.1f}s (≥ UPTAKE_LOOK_S={C.UPTAKE_LOOK_S})")
+        if self.best.get(tid, 0) >= self.need[tid]:
+            why.append(f"looked at it {self.best[tid]:.1f}s in one go (≥ max(UPTAKE_LOOK_S, "
+                       f"UPTAKE_DWELL_FACTOR×own dwell) = {self.need[tid]:.1f}s)")
         if tid in self.closer:
             why.append(f"stepped ≥ UPTAKE_STEP_M={C.UPTAKE_STEP_M} m closer")
         if tid in self.asked:
@@ -158,6 +179,7 @@ class StopController:
         self.frame = None
         self.steering_signals, self.fatigued = [], set()
         self.done = False
+        self.dwell_of = None   # tid -> own mean dwell (s), set by the loop from the signal layer
 
     # ------------------------------------------------------------ output
     def _act(self, t, kind, args, reason, duration_s=0.0):
@@ -192,6 +214,8 @@ class StopController:
 
     # ------------------------------------------------------------ inputs
     def on_event(self, ev, started):
+        if self.done:
+            return
         t = ev.t_detect if started else ev.t1
         if ev.kind == "excluded":
             if started:
@@ -270,8 +294,11 @@ class StopController:
                 if entry.get("type") == "action" and entry["t"] == a.t and entry["kind"] == "say_to_group":
                     entry.update(a.as_dict())
             self.scheduled = [s for s in self.scheduled if s[4] is not a]
-            if words[k:]:
-                self.resume_text = (" ".join(words[k:]), a.args.get("id"))
+            # resume from the start of the sentence that was cut
+            starts = [0] + [i + 1 for i, w in enumerate(words[:-1]) if w.endswith((".", "?", "!"))]
+            s0 = max(i for i in starts if i <= k)
+            if k < len(words):
+                self.resume_text = (" ".join(words[s0:]), a.args.get("id"))
             self.speech = None
             self.busy_until = t
 
@@ -317,7 +344,9 @@ class StopController:
         if self.resume_text:
             text, what = self.resume_text
             self.resume_text = None
-            return self._say(t, text, "resume after handing the floor", what=what)
+            a = self._say(t, text, "resume after handing the floor (from the start of the cut sentence)", what=what)
+            a.args["resume"] = True
+            return a
         if self.phase == "arrange":
             if t < self.t_start + C.ARRANGE_S:
                 return
@@ -387,7 +416,8 @@ class StopController:
         say = self._say(t + C.ACK_GAZE_S, a.text, reason, [(0.5, a.look, "addition: look at its target")], a.id)
         self.used.add(a.id)
         self.additions_done += 1
-        self.uptake = UptakeWindow(a, say.t, say.t + a.duration_s + C.UPTAKE_WINDOW_S, per, self.gallery, self.frame)
+        self.uptake = UptakeWindow(a, say.t, say.t + a.duration_s + C.UPTAKE_WINDOW_S, per, self.gallery, self.frame,
+                                   self.stop, self.dwell_of)
 
     def _close_uptake(self, t, complete=True):
         w, self.uptake = self.uptake, None
@@ -429,8 +459,8 @@ class StopController:
             self._note(t, "P13 misery: exclusion episode unresolved at stop end", track_id=tid)
         self.summary = {
             "stop": self.stop, "t_end": round(t, 2),
-            "additions": [a.args["id"] for a in self.actions
-                          if a.kind == "say_to_group" and str(a.args.get("id", "")).startswith(f"{self.stop}.add.")],
+            "additions": [a.args["id"] for a in self.actions if a.kind == "say_to_group" and not a.args.get("resume")
+                          and str(a.args.get("id", "")).startswith(f"{self.stop}.add.")],
             "exclusion_resolved": self.resolved,
             "exclusion_unresolved": sorted(self.episodes),
             "fatigued": sorted(self.fatigued),
