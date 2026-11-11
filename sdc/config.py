@@ -91,3 +91,29 @@ POINT_ASK_REOPENS_RESCINDED = True  # an explicit question re-confirms a rescind
 
 # ---------------------------------------------------------------- content (block 6)
 TTS_WORDS_PER_S = 2.5           # speech duration estimate for scripts and additions
+
+# ---------------------------------------------------------------- decision layer (block 5)
+# stop controller
+ARRANGE_S = 5.0                 # arrange phase before the core starts
+SEGMENT_GAP_S = 0.8             # breath between core segments
+OPEN_WAIT_S = 3.0               # wait time before the open question (D2)
+GAZE_SHIFT_S = 3.0              # gaze balancing: move gaze to the least-looked-at visitor this often (D5)
+ACK_GAZE_S = 1.0                # nonverbal acknowledgement before speaking (D7)
+STOP_END_MARGIN_S = 2.0         # don't start anything that would run past the stop's end minus this
+# exclusion handler (§4), top priority
+PAUSE_FLOOR_S = 3.0             # talked over: stop speaking and hold the floor open this long
+EXCLUSION_RECHECK_S = 6.0       # position barrier: if still excluded this long after turning, step back once
+STEP_BACK_M = 0.5               # widen the formation by stepping back from the exhibit
+MAX_REPOSITIONS_PER_STOP = 1    # §3.1: reposition at most once per stop
+# addition selector (§5, D8)
+ADDITION_THRESHOLD = 0.15       # deliver only if score(a) = Σ w_i·s_i(a) reaches this
+MAX_ADDITIONS_PER_STOP = 2      # P11
+# uptake monitor (D6)
+UPTAKE_WINDOW_S = 10.0          # after the addition ends
+UPTAKE_LOOK_S = 2.0             # looking at the addition's target for this long (in total) is uptake
+UPTAKE_STEP_M = 0.2             # stepping this much closer to the addition's exhibit is uptake
+CREDIT_PER_ACTED_SIGNAL = 1.0   # k_i grows by this when the robot visibly acts on i's signal (answer, confirmed layer)
+# between-stop planner (§6)
+PACE_FATIGUE_SHARE = 0.3        # slow down if at least this share of the group showed fatigue
+DEPTH_RAISE_SHARE = 0.5         # raise default depth if more than this share has a confirmed depth layer
+NEXT_STOP_CLOSE = 0.1           # P12: offer a two-way choice if the top two next stops score within this
