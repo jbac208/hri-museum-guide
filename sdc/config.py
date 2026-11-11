@@ -73,3 +73,18 @@ TALKED_OVER_OFF_S = 1.0
 # An exclusion episode starts when a bid and a barrier overlap, and ends when no barrier is left
 # (the visitor stopping bidding does not resolve it).
 EXCLUDED_ON_S = 0.0
+
+# ---------------------------------------------------------------- profile store (block 4)
+# Which event creates which layer (Perception & decision loop §2). Fatigue/bid/barrier/excluded create none.
+LAYER_FROM_EVENT = {
+    "linger": "feature_interest",      # target: the feature
+    "approach": "depth",               # target: the exhibit
+    "drift": "exhibit_interest",       # target: the other exhibit
+    "point_ask": "feature_interest",   # confirmed at once; exhibit_interest on the current stop if no feature
+}
+LAYER_EVENT_CONF = {"linger": 0.5, "approach": 0.4, "drift": 0.5}  # starting confidence of a pending layer
+SEED_LAYER_CONF = 0.3           # pending layers handed over in the start impression
+# repeated evidence: conf <- 1 - (1 - conf) * (1 - event_conf)   (independent-evidence combination)
+PENDING_WEIGHT = 0.5            # a pending layer counts PENDING_WEIGHT * confidence toward s_i(a); confirmed counts 1
+LAMBDA_DOMINANCE = 0.5          # D8: w_i = 1 / (1 + LAMBDA_DOMINANCE * k_i)
+POINT_ASK_REOPENS_RESCINDED = True  # an explicit question re-confirms a rescinded layer (the visitor asked; robot isn't pushing)
