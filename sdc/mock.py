@@ -124,6 +124,7 @@ class _GazeProcess:
         self.rng, self.s, self.companions = rng, script, companions
         self.features, self.stop = features, stop
         self.current, self.until = "none", -1.0
+        self.mode = None   # (gaze_mix, robot_glance_s) in force; a change re-samples at once
 
     def _window(self, t):
         """All windows active at t merged; later windows override earlier ones field by field."""
@@ -142,9 +143,14 @@ class _GazeProcess:
         if w and w.attention:
             # small flicker so fixed attention isn't perfectly clean
             return "none" if self.rng.random() < 0.02 else w.attention
+        mode = (id(w.gaze_mix) if w and w.gaze_mix else None, w.robot_glance_s if w else None)
+        if mode != self.mode:          # a scripted gaze window starts or ends: don't finish the old dwell
+            self.mode, self.until = mode, -1.0
         if t < self.until:
             return self.current
         mix = (w.gaze_mix if w and w.gaze_mix else self.s.gaze_mix)
+        if w and w.robot_glance_s and self.current == "robot":
+            mix = {k: p for k, p in mix.items() if k != "robot"}   # short glances stay separate glances
         kinds, weights = zip(*mix.items())
         kind = self.rng.choices(kinds, weights)[0]
         lo, hi = self.DUR[kind]
