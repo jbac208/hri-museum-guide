@@ -1,0 +1,66 @@
+{
+  "exhibit": "sea_chest",
+  "note": "Mock content for the prototype. The ship and its history are invented.",
+  "core": [
+    {
+      "id": "sea_chest.core.1",
+      "text": "This sea chest belonged to one of the Marigold's sailors. Everything a sailor owned for a voyage of many months had to fit inside a box this size.",
+      "cues": [{"word": "chest", "look": "exhibit:sea_chest", "gesture": "open_hand"}]
+    },
+    {
+      "id": "sea_chest.core.2",
+      "text": "The chest doubled as a seat and a table below deck. The rope handles were knotted by the sailor who owned it, and each one is a little different.",
+      "cues": [{"word": "rope", "look": "feature:sea_chest.handles", "gesture": "point"}]
+    },
+    {
+      "id": "sea_chest.core.3",
+      "text": "Inside the lid is a painting of the ship, made during long weeks at sea, so the owner could still see her once back home.",
+      "cues": [{"word": "painting", "look": "feature:sea_chest.lid", "gesture": "point"}]
+    }
+  ],
+  "open_question": {"text": "What would you pack if it all had to fit in here?", "look": "exhibit:sea_chest", "wait_s": 4.0},
+  "additions": [
+    {
+      "id": "sea_chest.add.lid_detail",
+      "type": "detail",
+      "feature": "sea_chest.lid",
+      "text": "Look closely at the painted lid: the flag on the main mast is the shipowner's own flag, so we know which ship this is.",
+      "serves": [{"kind": "feature_interest", "target": "sea_chest.lid"}],
+      "look": "feature:sea_chest.lid"
+    },
+    {
+      "id": "sea_chest.add.handles_detail",
+      "type": "detail",
+      "feature": "sea_chest.handles",
+      "text": "The handles are called beckets. Sailors tied them in fancy knots in their spare time, partly for pride and partly for practice.",
+      "serves": [{"kind": "feature_interest", "target": "sea_chest.handles"}],
+      "look": "feature:sea_chest.handles"
+    },
+    {
+      "id": "sea_chest.add.contents_depth",
+      "type": "depth",
+      "feature": null,
+      "text": "To go a bit deeper: a list found inside names a spare shirt, oilskins, a sewing kit, a knife, letters and a small Bible. Not much for six months.",
+      "serves": [{"kind": "depth", "target": "sea_chest"}],
+      "look": "exhibit:sea_chest"
+    },
+    {
+      "id": "sea_chest.add.compass_link",
+      "type": "neighbour",
+      "feature": null,
+      "text": "Sailors on watch steered by the compass we saw on the other side of the room; off watch, this chest was most of their private space.",
+      "serves": [{"kind": "exhibit_interest", "target": "compass"}],
+      "look": "exhibit:compass"
+    }
+  ],
+  "qa": [
+    {"id": "sea_chest.qa.owner", "match": ["whose", "who owned", "name", "owner"],
+     "text": "The name painted inside is J. Harlow, an able seaman who sailed on the Marigold for six years.",
+     "look": "feature:sea_chest.lid"},
+    {"id": "sea_chest.qa.wood", "match": ["wood", "made of", "pine"],
+     "text": "It's pine, painted on the outside to keep the damp out.",
+     "look": "exhibit:sea_chest"}
+  ],
+  "qa_fallback": {"text": "That's a good question, and I don't know the answer. What we do know is that this chest went to sea with the Marigold for six years.",
+                  "look": "exhibit:sea_chest"}
+}
