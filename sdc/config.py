@@ -120,3 +120,7 @@ CREDIT_PER_ACTED_SIGNAL = 1.0   # k_i grows by this when the robot visibly acts 
 PACE_FATIGUE_SHARE = 0.3        # slow down if at least this share of the group showed fatigue
 DEPTH_RAISE_SHARE = 0.5         # raise default depth if more than this share has a confirmed depth layer
 NEXT_STOP_CLOSE = 0.1           # P12: offer a two-way choice if the top two next stops score within this
+
+# ---------------------------------------------------------------- logging (block 8)
+LOG_TRACK_HZ = 5                # tracks are logged at this rate (no video, ever)
+STEERING_KINDS = ("linger", "approach", "drift", "point_ask")   # signals counted by steering uptake (D3)

@@ -3,6 +3,7 @@
 Open-loop on mock streams for now (visitors don't react to the robot; task 5 closes the loop).
 """
 from . import content
+from .metrics import EventLog
 from .adapter import Frame, StartImpression, Utterance
 from .decision import StopController, plan_next_stop
 from .profile import ProfileStore
@@ -10,8 +11,9 @@ from .signals import SignalLayer
 
 
 class Loop:
-    def __init__(self, gallery, stop, duration_s, stop_index=0, contents=None, t_start=0.0):
+    def __init__(self, gallery, stop, duration_s, stop_index=0, contents=None, t_start=0.0, scenario="?"):
         self.gallery = gallery
+        self.log = EventLog(scenario, stop, gallery["id"], duration_s)
         self.contents = contents or content.load_all(gallery)
         self.signals = SignalLayer(gallery, stop, stop_index)
         self.profile = ProfileStore()
@@ -27,7 +29,7 @@ class Loop:
             started = id(ev) not in self._seen
             self._seen.add(id(ev))
             if started:
-                self.profile.on_event(ev, self.stop)
+                self.log.on_event_start(ev, self.profile.on_event(ev, self.stop))
             self.ctrl.on_event(ev, started)
 
     def step(self, rec):
@@ -36,6 +38,7 @@ class Loop:
         self._dispatch(self.signals.step(rec))
         if isinstance(rec, Frame):
             self.t = rec.t
+            self.log.on_frame(rec)
             self.ctrl.update(rec)
         elif isinstance(rec, Utterance):
             self.ctrl.on_utterance(rec)
@@ -57,3 +60,7 @@ class Loop:
         for r in records:
             self.step(r)
         return self.finish()
+
+    def records(self):
+        """The event log (tracks + events, no video) with the live measures as its last record."""
+        return self.log.records(self)

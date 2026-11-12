@@ -416,6 +416,8 @@ class StopController:
         say = self._say(t + C.ACK_GAZE_S, a.text, reason, [(0.5, a.look, "addition: look at its target")], a.id)
         self.used.add(a.id)
         self.additions_done += 1
+        self._note(say.t, "addition", addition=a.id, score=round(score, 3),
+                   addressed={tid: [l.id for l in layers] for tid, (_, _, layers) in per.items()})
         self.uptake = UptakeWindow(a, say.t, say.t + a.duration_s + C.UPTAKE_WINDOW_S, per, self.gallery, self.frame,
                                    self.stop, self.dwell_of)
 

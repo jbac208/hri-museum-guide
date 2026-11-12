@@ -124,6 +124,7 @@ class _Visitor:
     hyst: dict = field(default_factory=dict)
     active: dict = field(default_factory=dict)        # kind or "barrier:<detail>" -> Event
     last_point_ask: Event | None = None
+    point_ask_modes: set = field(default_factory=set)
 
 
 class SignalLayer:
@@ -254,7 +255,7 @@ class SignalLayer:
                 if not st.pointing_emitted and f.t - st.pointing_since >= C.POINT_MIN_S - 1e-9:
                     st.pointing_emitted = True
                     out += self._point_ask(st, f.t, st.pointing_since, o.pointing_at,
-                                           f"pointing at {o.pointing_at} for ≥ POINT_MIN_S={C.POINT_MIN_S}s")
+                                           f"pointing at {o.pointing_at} for ≥ POINT_MIN_S={C.POINT_MIN_S}s", "point")
                 elif st.pointing_emitted and st.last_point_ask is not None:
                     st.last_point_ask.t1 = f.t
             else:
@@ -289,18 +290,22 @@ class SignalLayer:
             return []   # handled as bid + talked-over barrier by the tick rules
         target = st.att[8:] if st.att.startswith("feature:") else None
         how = "question, talked over" if overlapped else "question that got the floor"
-        return self._point_ask(st, u.t, t_start, target, f'{how}: "{u.text}"')
+        return self._point_ask(st, u.t, t_start, target, f'{how}: "{u.text}"', "question")
 
-    def _point_ask(self, st, t, t0, target, reason):
+    def _point_ask(self, st, t, t0, target, reason, mode):
+        """mode: 'point' or 'question'. A point and a question close together are one event;
+        two questions are always two events."""
         last = st.last_point_ask
-        if last is not None and t - last.t1 <= C.POINT_ASK_MERGE_S:
+        if (last is not None and t - last.t1 <= C.POINT_ASK_MERGE_S
+                and mode not in st.point_ask_modes):
+            st.point_ask_modes.add(mode)
             last.t1 = t
             last.reason += f" + {reason}"
             last.target = last.target or target
             return []
         ev = Event("point_ask", st.seed.track_id, t, t0, t1=t, target=target, reason=f"point_ask: {reason}")
         self.events.append(ev)
-        st.last_point_ask = ev
+        st.last_point_ask, st.point_ask_modes = ev, {mode}
         return [ev]
 
     # ------------------------------------------------------------ tick rules
