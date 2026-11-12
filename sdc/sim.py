@@ -35,6 +35,7 @@ JOIN_DELAY_S = (1.0, 3.0)
 JOIN_MOVE_S = 3.0
 INTERRUPT_AFTER_S = 1.0
 GAP_QUIET_S = 0.5
+OVERRUN_MAX_S = 30.0         # keep simulating this long past the scenario's end while the stop overruns
 
 
 @dataclass
@@ -180,8 +181,10 @@ def run_closed_loop(spec, gallery, loop_factory, validate=True):
     for line in sim.start_lines():
         feed(line)
     k = 0
-    for i in range(int(scn.duration_s * scn.rate_hz)):
+    for i in range(int((scn.duration_s + OVERRUN_MAX_S) * scn.rate_hz)):
         t = round(i / scn.rate_hz, 3)
+        if t >= scn.duration_s and loop.ctrl.done:
+            break                                   # the stop may overrun to answer a late question (Q11)
         for line in sim.step(t):
             feed(line)
         for a in loop.actions[k:]:

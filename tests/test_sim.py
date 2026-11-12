@@ -74,6 +74,27 @@ def test_resume_restarts_cut_sentence():
         assert full.args["text"].endswith(a.args["text"]) and a.args["text"][0].isupper()
 
 
+def test_questions_answered_quickly_and_all():
+    """Q11: answered at the end of the current sentence (or at once in a pause); none dropped."""
+    from sdc import config as C
+    asked = [l for l in LINES if l["type"] == "utterance" and l["is_question"]]
+    answered = [n for n in NOTES if n["note"] == "question answered"]
+    assert len(answered) == len(asked) == 5
+    longest = max(len(sent.split()) for ex in CONTENTS.values()
+                  for text in [s.text for s in ex.core] + [a.text for a in ex.additions] + [q["text"] for q in ex.qa]
+                  for sent in text.replace("?", ".").split(".")) / C.TTS_WORDS_PER_S
+    assert max(n["wait_s"] for n in answered) <= longest + C.ACK_GAZE_S + 0.5
+
+
+def test_late_question_overruns_the_stop():
+    s = spec()
+    s.speech["v3"][-1].not_before = 147.5          # the last question comes right at the end
+    loop, _, _, out = run(s)
+    notes = [e for e in loop.ctrl.log if e["type"] == "note"]
+    assert len([n for n in notes if n["note"] == "question answered"]) == 5
+    assert out["summary"]["t_end"] > 150
+
+
 def test_uptake_follows_hidden_interest():
     hit = miss = fa = cr = 0
     for seed in SEEDS:

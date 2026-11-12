@@ -31,7 +31,7 @@ def test_log_shape():
     ts = [r["t"] for r in RECS]
     assert ts == sorted(ts)
     tracks = [r for r in RECS if r["type"] == "track"]
-    assert abs(len(tracks) - 150 * C.LOG_TRACK_HZ) <= 1
+    assert abs(len(tracks) - tracks[-1]["t"] * C.LOG_TRACK_HZ) <= 1.5      # the stop may overrun (Q11)
 
 
 def test_no_visitor_speech_text_in_log():

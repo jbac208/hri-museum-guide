@@ -53,7 +53,7 @@ def test_reserved_v4_only_gaze_balancing():
 
 
 def test_additions_capped_and_unique():
-    adds = [a.args["id"] for a in says() if ".add." in str(a.args["id"])]
+    adds = [a.args["id"] for a in says() if ".add." in str(a.args["id"]) and not a.args.get("resume")]
     assert 1 <= len(adds) <= C.MAX_ADDITIONS_PER_STOP and len(set(adds)) == len(adds)
 
 

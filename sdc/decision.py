@@ -8,7 +8,9 @@ with these always-on parts:
                      speaking, hold the floor open, gaze to them; falling behind -> slow down and wait.
                      Never a name, never a direct question.
   question answering every question gets a canned answer, said to the group (D7), after a nonverbal
-                     acknowledgement; the asker's steering credit goes up (the signal was acted on).
+                     acknowledgement, at the end of the sentence being said (a pause ends at once); the
+                     rest resumes after. Late questions are answered even if the stop overruns. Answers
+                     don't count toward P11. The asker's steering credit goes up (Q11, Q10).
   gaze balancing     gaze moves to the least-looked-at visitor every GAZE_SHIFT_S (D5); core cue words
                      send gaze to the exhibit or feature instead.
 In the respond phase:
@@ -247,6 +249,39 @@ class StopController:
             self.uptake.on_utterance(u)
         if u.is_question and not self.done:
             self.answers.append(u)
+            self._make_room_for_answer(u.t)
+
+    def _make_room_for_answer(self, t):
+        """Q11: answer at the end of the sentence being said (the rest resumes after the answer);
+        a pause (wait time, holding the floor) ends at once."""
+        if self.speech and t < self.speech[0].t + self.speech[0].duration_s:
+            a, text = self.speech
+            words = text.split()
+            k = int((t - a.t) * C.TTS_WORDS_PER_S)
+            ends = [i for i, w in enumerate(words) if w.endswith((".", "?", "!")) and i >= k]
+            if not ends or ends[0] >= len(words) - 1:
+                return                                   # already in the last sentence: answer when it ends
+            cut = a.t + (ends[0] + 1) / C.TTS_WORDS_PER_S
+            a.duration_s = round(cut - a.t, 2)
+            a.args["cut_at"] = round(cut, 2)
+            a.args["cut_for"] = "question"
+            self._sync_log(a)
+            self.scheduled = [x for x in self.scheduled if x[4] is not a or x[0] < cut]
+            if not self.resume_text:
+                self.resume_text = (" ".join(words[ends[0] + 1:]), a.args.get("id"))
+            self.busy_until = cut
+        elif t < self.busy_until:
+            p = next((x for x in reversed(self.actions) if x.kind == "pause" and x.t + x.duration_s > t), None)
+            if p is not None:
+                p.duration_s = round(max(0.0, t - p.t), 2)
+                p.args["ended_for"] = "question"
+                self._sync_log(p)
+            self.busy_until = t
+
+    def _sync_log(self, a):
+        for entry in self.log:
+            if entry.get("type") == "action" and entry["t"] == a.t and entry["kind"] == a.kind:
+                entry.update(a.as_dict())
 
     # ------------------------------------------------------------ exclusion handler (§4)
     def _fix(self, t, tid, barrier):
@@ -297,9 +332,7 @@ class StopController:
             k = int((t - a.t) * C.TTS_WORDS_PER_S)
             a.duration_s = round(t - a.t, 2)
             a.args["cut_at"] = round(t, 2)
-            for entry in self.log:
-                if entry.get("type") == "action" and entry["t"] == a.t and entry["kind"] == "say_to_group":
-                    entry.update(a.as_dict())
+            self._sync_log(a)
             self.scheduled = [s for s in self.scheduled if s[4] is not a]
             # resume from the start of the sentence that was cut
             starts = [0] + [i + 1 for i, w in enumerate(words[:-1]) if w.endswith((".", "?", "!"))]
@@ -326,6 +359,10 @@ class StopController:
         if not self.arranged:
             self._arrange(t)
         if t >= self.t_end and t >= self.busy_until:
+            if self.answers:                                   # Q11: a late question is still answered
+                self._note(t, "overrun: answering a late question before moving on (Q11)")
+                self._answer(t, self.answers.pop(0))
+                return
             self.end_stop(t)
             return
         self._exclusion_followups(t)
@@ -351,7 +388,7 @@ class StopController:
         if self.resume_text:
             text, what = self.resume_text
             self.resume_text = None
-            a = self._say(t, text, "resume after handing the floor (from the start of the cut sentence)", what=what)
+            a = self._say(t, text, "resume what was cut (after an answer or after handing the floor), from a sentence start", what=what)
             a.args["resume"] = True
             return a
         if self.phase == "arrange":
@@ -407,7 +444,8 @@ class StopController:
         self._say(t + C.ACK_GAZE_S, qa["text"], f"answer ({qa['id']}), said to the group (D7)",
                   [(0.5, qa["look"], "answer: look at what it is about")], qa["id"])
         self.profile.add_credit(u.track_id, t, f"question answered ({qa['id']})", C.CREDIT_PER_ACTED_SIGNAL)
-        self._note(t, "question answered", track_id=u.track_id, qa=qa["id"])
+        self._note(t, "question answered", track_id=u.track_id, qa=qa["id"], asked_t=round(u.t, 2),
+                   wait_s=round(t + C.ACK_GAZE_S - u.t, 2))
 
     def _try_addition(self, t):
         best = select_addition(self.ex, self.profile, self.used)
