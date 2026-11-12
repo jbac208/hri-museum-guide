@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tour replay</title>
+<style>
+:root {
+  --bg: #f6f5f2; --card: #ffffff; --ink: #1f2328; --muted: #6b7280; --line: #e3e1dc;
+  --accent: #2f6fdf; --chip: #f1efe9;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171a; --card: #1e2125; --ink: #e8e6e3; --muted: #9aa0a6; --line: #30343a;
+    --accent: #7aa7ff; --chip: #2a2e33;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+header { padding: 14px 16px 6px; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; }
+header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+header .sub { color: var(--muted); font-size: 13px; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; padding: 0 16px 12px; }
+@media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+#mapcard { padding: 6px; }
+#map { width: 100%; height: auto; max-height: 62vh; display: block; border-radius: 6px; }
+#panel { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; align-self: start; position: sticky; top: 8px; }
+.label { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+#clock { font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 600; }
+#say { min-height: 3.2em; font-size: 14px; }
+#say .tag, .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 9px; background: var(--chip);
+  color: var(--muted); margin-right: 4px; }
+#last { font-size: 13px; }
+#last .why { color: var(--muted); }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+td { padding: 3px 4px; vertical-align: top; border-top: 1px solid var(--line); }
+td.id { font-weight: 600; width: 2.4em; }
+td.w { font-variant-numeric: tabular-nums; color: var(--muted); width: 4.2em; text-align: right; white-space: nowrap; }
+.chip { display: inline-block; padding: 0 6px; margin: 1px 2px 1px 0; border-radius: 8px; font-size: 11.5px; border: 1px solid; }
+.chip.pending { border-style: dashed; border-color: #c99a2e; color: #9a7417; }
+.chip.confirmed { border-color: #2a9d6a; background: #2a9d6a1a; color: #1f7a52; }
+.chip.rescinded { border-color: #aaa; color: #999; text-decoration: line-through; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .chip.pending { color: #e2b955; }
+  :root:not([data-theme="light"]) .chip.confirmed { color: #6fd3a3; }
+}
+#controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 8px 16px; }
+#controls button, #controls select { font: inherit; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink); cursor: pointer; }
+#controls label { color: var(--muted); font-size: 13px; display: flex; gap: 4px; align-items: center; }
+#scrub { flex: 1 1 240px; }
+#left { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+#tlcard { padding: 6px 0 4px; overflow-x: auto; }
+#timeline { display: block; }
+#tip { position: fixed; pointer-events: none; max-width: 420px; background: #111c; color: #fff; padding: 6px 8px;
+  border-radius: 6px; font-size: 12px; display: none; z-index: 10; }
+#measures { font-size: 12.5px; }
+#measures div { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--line); padding: 2px 0; }
+#measures b { font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--muted); padding: 0 4px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tour replay</h1>
+  <span class="sub" id="sub"></span>
+</header>
+<div id="controls">
+  <button id="play" title="Space">Play</button>
+  <input id="scrub" type="range" min="0" max="1" step="0.1" value="0" aria-label="Time">
+  <select id="speed" aria-label="Speed"><option>1</option><option selected>2</option><option>4</option><option>8</option></select>
+  <label><input type="checkbox" id="showgaze"> gaze balancing</label>
+  <label><input type="checkbox" id="showsim" checked> sim reactions</label>
+  <button id="export" title="Download the map at this moment as SVG">Export map</button>
+</div>
+<main>
+  <div id="left">
+    <div class="card" id="mapcard"><svg id="map" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    <div class="legend" id="legend"></div>
+    <div class="card" id="tlcard"><svg id="timeline" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  </div>
+  <div class="card" id="panel">
+    <div><div class="label">Time</div><div id="clock">0.0 s</div></div>
+    <div><div class="label">Robot says (to the group)</div><div id="say"></div></div>
+    <div><div class="label">Latest decision</div><div id="last"></div></div>
+    <div><div class="label">Profile layers · weight w = 1/(1+λk)</div><table id="layers"></table></div>
+    <div><div class="label">Live measures (end of stop)</div><div id="measures"></div></div>
+  </div>
+</main>
+<div id="tip"></div>
+<script>
+const D = /*DATA*/null;
+
+// ------------------------------------------------------------------ constants
+const KIND = { linger: "#2a9d8f", approach: "#457b9d", point_ask: "#8e6cbf", drift: "#d4a017",
+  fatigue: "#9a8c98", bid: "#f4a261", barrier: "#e76f51", excluded: "#d62828" };
+const SAY = { core: "#7b95c4", add: "#2a9d8f", qa: "#8e6cbf", open: "#9aa3ad", other: "#9aa3ad" };
+const CLUSTER = ["#4c78a8", "#f58518", "#54a24b", "#b279a2", "#e45756", "#72b7b2", "#9d755d"];
+const MAP_BG = "#fbfaf7", MAP_INK = "#2b2f33", MAP_MUTED = "#8a8f96";
+
+// ------------------------------------------------------------------ data prep
+const tracks = D.tracks, T_END = D.meta.duration_s;
+const ex = Object.fromEntries(D.gallery.exhibits.map(e => [e.id, e]));
+const feat = {};
+D.gallery.exhibits.forEach(e => e.features.forEach(f => feat[f.id] = f));
+const stop = ex[D.meta.stop];
+const visitorIds = [...new Set(tracks.flatMap(r => r.visitors.map(v => v.id)))].sort();
+const clusters = [...new Set(tracks[0].visitors.map(v => v.cluster))];
+const clusterOf = Object.fromEntries(tracks[0].visitors.map(v => [v.id, v.cluster]));
+const colorOf = id => CLUSTER[clusters.indexOf(clusterOf[id]) % CLUSTER.length];
+const actions = D.actions.slice().sort((a, b) => a.t - b.t);
+const says = actions.filter(a => a.kind === "say_to_group");
+const sayType = a => { const id = String(a.args.id || "");
+  return id.includes(".core.") ? "core" : id.includes(".add.") ? "add" : id.includes(".qa.") ? "qa" : id.endsWith(".open") ? "open" : "other"; };
+
+function trackAt(t) {
+  let lo = 0, hi = tracks.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (tracks[m].t <= t) lo = m; else hi = m - 1; }
+  const a = tracks[lo], b = tracks[Math.min(lo + 1, tracks.length - 1)];
+  const u = b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 0;
+  const bm = Object.fromEntries(b.visitors.map(v => [v.id, v]));
+  const ang = (x, y) => { let d = y - x; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return x + u * d; };
+  return { robot: a.robot, visitors: a.visitors.map(v => { const w = bm[v.id] || v;
+    return { ...v, x: v.x + u * (w.x - v.x), y: v.y + u * (w.y - v.y), head_yaw: ang(v.head_yaw, w.head_yaw), body_yaw: ang(v.body_yaw, w.body_yaw) }; }) };
+}
+
+function robotAt(t) {   // commanded pose: start from the first track, apply turn_body / step_to
+  const r = { x: tracks[0].robot.x, y: tracks[0].robot.y, yaw: tracks[0].robot.yaw };
+  for (const a of actions) { if (a.t > t) break;
+    if (a.kind === "turn_body") r.yaw = a.args.yaw;
+    if (a.kind === "step_to") { r.x = a.args.x; r.y = a.args.y; } }
+  return r;
+}
+const sayingAt = t => says.find(a => a.t <= t && t < a.t + a.duration_s) || null;
+const gazeAt = t => { let g = null; for (const a of actions) { if (a.t > t) break; if (a.kind === "gaze_at") g = a; } return g; };
+const activeEvents = t => D.events.filter(e => e.t_detect <= t && (e.t1 == null || t < e.t1 || (e.kind === "point_ask" && t < e.t_detect + 2)));
+
+function layersAt(t) {
+  const L = {}, credit = {};
+  for (const p of D.profile) { if (p.t > t) break;
+    if (p.layer) L[p.layer] = p;
+    if (p.op === "credit") credit[p.track_id] = p; }
+  return { layers: Object.values(L).filter(l => l.op !== "remove"), credit };
+}
+
+// ------------------------------------------------------------------ map
+const allX = [stop.x - stop.radius, stop.x + stop.radius], allY = [stop.y - stop.radius, stop.y + stop.radius];
+tracks.forEach(r => { r.visitors.forEach(v => { allX.push(v.x); allY.push(v.y); }); allX.push(r.robot.x); allY.push(r.robot.y); });
+actions.filter(a => a.kind === "step_to").forEach(a => { allX.push(a.args.x); allY.push(a.args.y); });
+const pad = 0.7, minX = Math.min(...allX) - pad, maxX = Math.max(...allX) + pad, minY = Math.min(...allY) - pad, maxY = Math.max(...allY) + pad;
+const S = 90, W = (maxX - minX) * S, H = (maxY - minY) * S;
+const px = x => ((x - minX) * S).toFixed(1), py = y => ((maxY - y) * S).toFixed(1);
+const map = document.getElementById("map");
+map.setAttribute("viewBox", `0 0 ${W.toFixed(0)} ${H.toFixed(0)}`);
+
+function targetXY(target, vis) {
+  if (!target) return null;
+  if (target === "robot") return null;
+  const [k, id] = target.split(":");
+  if (k === "visitor") { const v = vis.find(v => v.id === id); return v ? [v.x, v.y] : null; }
+  if (k === "feature" && feat[id]) return [feat[id].x, feat[id].y];
+  if (k === "exhibit" && ex[id]) return [ex[id].x, ex[id].y];
+  return null;
+}
+
+function drawMap(t) {
+  const fr = trackAt(t), vis = fr.visitors, rob = robotAt(t), act = activeEvents(t);
+  const has = (id, k) => act.some(e => e.track_id === id && e.kind === k);
+  let s = `<rect width="100%" height="100%" fill="${MAP_BG}"/>`;
+  // metre grid
+  for (let gx = Math.ceil(minX); gx <= maxX; gx++) s += `<line x1="${px(gx)}" y1="0" x2="${px(gx)}" y2="${H}" stroke="#ece9e2" stroke-width="1"/>`;
+  for (let gy = Math.ceil(minY); gy <= maxY; gy++) s += `<line x1="0" y1="${py(gy)}" x2="${W}" y2="${py(gy)}" stroke="#ece9e2" stroke-width="1"/>`;
+  // formation ring around the stop
+  s += `<circle cx="${px(stop.x)}" cy="${py(stop.y)}" r="${(1.8 * S).toFixed(1)}" fill="none" stroke="#d9e6f5" stroke-width="${(1.6 * S).toFixed(1)}" opacity=".55"/>`;
+  // exhibits + features
+  const inView = e => e.x >= minX && e.x <= maxX && e.y >= minY && e.y <= maxY;
+  let nl = 0, nr = 0;
+  for (const e of D.gallery.exhibits.filter(e => !inView(e))) {   // off-map: pinned to a top corner
+    const right = e.x > stop.x, row = right ? nr++ : nl++, y = 22 + row * 18;
+    const d = Math.hypot(e.x - stop.x, e.y - stop.y).toFixed(1);
+    const x = right ? W - 12 : 12;
+    s += `<text x="${x}" y="${y}" text-anchor="${right ? "end" : "start"}" font-size="12" font-weight="600" fill="${MAP_INK}">${right ? "" : "← "}${e.name} <tspan font-weight="400" fill="${MAP_MUTED}">${d} m</tspan>${right ? " →" : ""}</text>`;
+  }
+  for (const e of D.gallery.exhibits.filter(inView)) {
+    const cur = e.id === stop.id;
+    s += `<circle cx="${px(e.x)}" cy="${py(e.y)}" r="${(e.radius * S).toFixed(1)}" fill="${cur ? "#efe6d2" : "#f0eeea"}" stroke="${cur ? "#b08d4a" : "#c9c4ba"}" stroke-width="1.5"/>`;
+    s += `<text x="${px(e.x)}" y="${(+py(e.y) - e.radius * S - 6).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="600" fill="${MAP_INK}">${e.name}</text>`;
+    for (const f of e.features) s += `<rect x="${(+px(f.x) - 3).toFixed(1)}" y="${(+py(f.y) - 3).toFixed(1)}" width="6" height="6" transform="rotate(45 ${px(f.x)} ${py(f.y)})" fill="#b08d4a"><title>${f.name}</title></rect>`;
+  }
+  // blocked line of sight
+  for (const v of vis) if (!v.los_exhibit)
+    s += `<line x1="${px(v.x)}" y1="${py(v.y)}" x2="${px(stop.x)}" y2="${py(stop.y)}" stroke="#e76f51" stroke-width="1.5" stroke-dasharray="4 4" opacity=".8"/>`;
+  // robot gaze
+  const g = gazeAt(t), gxy = g && targetXY(g.args.target, vis);
+  if (gxy) s += `<line x1="${px(rob.x)}" y1="${py(rob.y)}" x2="${px(gxy[0])}" y2="${py(gxy[1])}" stroke="#2f6fdf" stroke-width="1.2" opacity=".45"/>`;
+  // visitors
+  for (const v of vis) {
+    const c = colorOf(v.id), X = +px(v.x), Y = +py(v.y), r = 0.22 * S;
+    if (has(v.id, "excluded")) s += `<circle cx="${X}" cy="${Y}" r="${r + 9}" fill="#d6282822" stroke="#d62828" stroke-width="2.5"/>`;
+    else if (has(v.id, "barrier")) s += `<circle cx="${X}" cy="${Y}" r="${r + 7}" fill="none" stroke="#e76f51" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+    const hx = X + Math.cos(v.head_yaw) * 0.55 * S, hy = Y - Math.sin(v.head_yaw) * 0.55 * S;
+    s += `<line x1="${X}" y1="${Y}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${c}" stroke-width="2" stroke-linecap="round" opacity=".8"/>`;
+    s += `<circle cx="${X}" cy="${Y}" r="${r}" fill="${v.in_formation ? c : "#ffffff"}" stroke="${c}" stroke-width="2.5"/>`;
+    s += `<text x="${X}" y="${(Y + 4).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="${v.in_formation ? "#fff" : c}">${v.id}</text>`;
+    if (v.speaking) s += `<text x="${X + r + 2}" y="${(Y + 5).toFixed(1)}" font-size="13" fill="${MAP_INK}">💬</text>`;
+    const PRI = ["excluded", "bid", "point_ask", "linger", "approach", "drift", "fatigue"];
+    const badges = PRI.filter(k => has(v.id, k)).slice(0, 2);
+    if (badges.length) {
+      s += `<text x="${X}" y="${(Y - r - 6).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" stroke="${MAP_BG}" stroke-width="3" paint-order="stroke">` +
+        badges.map((k, i) => `<tspan fill="${KIND[k]}">${i ? " · " : ""}${k.replace("_", "/")}</tspan>`).join("") + `</text>`;
+    }
+  }
+  // robot
+  const RX = +px(rob.x), RY = +py(rob.y), R = 0.3 * S, a = rob.yaw;
+  const pt = (ang, rr) => `${(RX + Math.cos(ang) * rr).toFixed(1)},${(RY - Math.sin(ang) * rr).toFixed(1)}`;
+  s += `<polygon points="${pt(a, R * 1.35)} ${pt(a + 2.4, R)} ${pt(a - 2.4, R)}" fill="#2b2f33" stroke="#fff" stroke-width="1.5"/>`;
+  s += `<text x="${RX}" y="${(RY + R + 16).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="600" stroke="${MAP_BG}" stroke-width="3" paint-order="stroke" fill="${MAP_INK}">robot</text>`;
+  if (sayingAt(t)) s += `<text x="${RX + R + 4}" y="${(RY - R).toFixed(1)}" font-size="15">🔊</text>`;
+  // scale bar
+  s += `<line x1="12" y1="${H - 14}" x2="${12 + S}" y2="${H - 14}" stroke="${MAP_MUTED}" stroke-width="2"/><text x="${12 + S / 2}" y="${H - 20}" text-anchor="middle" font-size="10" fill="${MAP_MUTED}">1 m</text>`;
+  map.innerHTML = s;
+}
+
+// ------------------------------------------------------------------ panel
+const esc = s => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+function drawPanel(t) {
+  document.getElementById("clock").textContent = `${t.toFixed(1)} s`;
+  const sp = sayingAt(t);
+  document.getElementById("say").innerHTML = sp ? `<span class="tag">${sayType(sp)}</span>${esc(sp.args.text)}` : `<span style="color:var(--muted)">(quiet)</span>`;
+  let last = null;
+  for (const a of actions) { if (a.t > t) break; if (!a.reason.startsWith("gaze balancing") && !a.reason.startsWith("cue word")) last = a; }
+  document.getElementById("last").innerHTML = last ? `<b>${last.t.toFixed(1)} s · ${last.kind}</b> ${a2s(last)}<div class="why">${esc(last.reason)}</div>` : "";
+  const { layers, credit } = layersAt(t);
+  document.getElementById("layers").innerHTML = visitorIds.map(id => {
+    const w = credit[id] ? credit[id].weight.toFixed(2) : "1.00";
+    const chips = layers.filter(l => l.track_id === id).map(l =>
+      `<span class="chip ${l.status}" title="${esc(l.reason)}">${l.kind.replace("_interest", "")}: ${esc(l.target)}</span>`).join("");
+    return `<tr><td class="id" style="color:${colorOf(id)}">${id}</td><td>${chips || '<span style="color:var(--muted)">—</span>'}</td><td class="w">w ${w}</td></tr>`;
+  }).join("");
+}
+const a2s = a => a.kind === "say_to_group" ? "" : a.kind === "gaze_at" ? `→ ${esc(a.args.target)}` :
+  a.kind === "turn_body" ? `yaw ${a.args.yaw}` : a.kind === "step_to" ? `(${a.args.x}, ${a.args.y})` : a.kind === "pause" ? `${a.args.s} s` : "";
+
+function drawMeasures() {
+  const m = D.measures, f = x => x == null ? "–" : x;
+  const rows = [
+    ["Steering uptake (D3)", `${m.steering_uptake.acted_on}/${m.steering_uptake.detected} = ${f(m.steering_uptake.share)}`],
+    ["Exclusion episodes (D10)", `${m.exclusion.episodes}, resolved ${m.exclusion.resolved}, ${m.exclusion.time_to_resolve_s.map(x => x + " s").join(", ") || "–"}`],
+    ["Misread rate (D6)", `${m.misread_rate.rescinded}/${m.misread_rate.tested} = ${f(m.misread_rate.rate)}`],
+    ["Dominance share (D8)", `${f(m.dominance_share.top_visitor)} ${f(m.dominance_share.share)}`],
+    ["Unresolved at stop end (P13)", `${f(m.p13_unresolved.share)}`],
+  ];
+  document.getElementById("measures").innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join("");
+}
+
+// ------------------------------------------------------------------ timeline
+const tl = document.getElementById("timeline"), tip = document.getElementById("tip");
+const LANE = 22, LEFT = 64, TOP = 18;
+let tlW = 0;
+const tx = t => LEFT + (t / T_END) * (tlW - LEFT - 12);
+function drawTimeline() {
+  tlW = Math.max(560, document.getElementById("tlcard").clientWidth);
+  const showGaze = document.getElementById("showgaze").checked, showSim = document.getElementById("showsim").checked;
+  const lanes = ["robot", ...visitorIds];
+  const H = TOP + lanes.length * LANE + 18;
+  tl.setAttribute("width", tlW); tl.setAttribute("height", H);
+  let s = "";
+  for (let t = 0; t <= T_END; t += 10) s += `<line x1="${tx(t)}" y1="${TOP - 4}" x2="${tx(t)}" y2="${H - 16}" stroke="var(--line)"/><text x="${tx(t)}" y="${H - 4}" text-anchor="middle" font-size="10" fill="var(--muted)">${t}</text>`;
+  lanes.forEach((id, i) => s += `<text x="8" y="${TOP + i * LANE + 15}" font-size="12" font-weight="600" fill="${id === "robot" ? "var(--ink)" : colorOf(id)}">${id}</text>`);
+  const y0 = TOP;
+  for (const a of says) s += `<rect data-tip="${esc(a.t.toFixed(1) + " s · " + sayType(a) + ": " + a.args.text + " — " + a.reason)}" x="${tx(a.t)}" y="${y0 + 4}" width="${Math.max(2, tx(a.t + a.duration_s) - tx(a.t))}" height="${LANE - 8}" rx="3" fill="${SAY[sayType(a)]}"/>`;
+  for (const a of actions) {
+    if (a.kind === "say_to_group") continue;
+    const isFix = a.reason.startsWith("excluded") || a.reason.startsWith("still excluded");
+    if (!showGaze && (a.reason.startsWith("gaze balancing") || a.reason.startsWith("cue word"))) continue;
+    if (a.kind === "pause") s += `<rect data-tip="${esc(a.t.toFixed(1) + " s · pause " + a.args.s + " s — " + a.reason)}" x="${tx(a.t)}" y="${y0 + 8}" width="${tx(a.t + a.duration_s) - tx(a.t)}" height="${LANE - 16}" fill="none" stroke="${isFix ? "#d62828" : "#9aa3ad"}" stroke-dasharray="2 2"/>`;
+    else s += `<line data-tip="${esc(a.t.toFixed(1) + " s · " + a.kind + " " + a2s(a) + " — " + a.reason)}" x1="${tx(a.t)}" y1="${y0 + 2}" x2="${tx(a.t)}" y2="${y0 + LANE - 2}" stroke="${isFix ? "#d62828" : "#2b2f3399"}" stroke-width="${isFix ? 2.5 : 1}"/>`;
+  }
+  visitorIds.forEach((id, i) => {
+    const y = TOP + (i + 1) * LANE;
+    const evs = D.events.filter(e => e.track_id === id);
+    const order = ["barrier", "excluded", "bid", "linger", "approach", "drift", "fatigue", "point_ask"];
+    evs.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+    for (const e of evs) {
+      const t1 = e.t1 == null ? T_END : e.t1, inst = e.kind === "point_ask";
+      const hgt = e.kind === "barrier" ? 4 : e.kind === "excluded" ? 8 : 10, yy = e.kind === "barrier" ? y + LANE - 6 : y + (LANE - hgt) / 2 - 1;
+      s += `<rect data-tip="${esc(e.t_detect.toFixed(1) + "–" + t1.toFixed(1) + " s · " + e.reason)}" x="${tx(e.t_detect) - (inst ? 3 : 0)}" y="${yy}" width="${inst ? 6 : Math.max(3, tx(t1) - tx(e.t_detect))}" height="${hgt}" rx="2" fill="${KIND[e.kind]}" opacity="${e.kind === "barrier" ? .8 : .9}"/>`;
+    }
+    for (const n of D.notes.filter(n => n.track_id === id && ["uptake", "no uptake"].includes(n.note)))
+      s += `<text data-tip="${esc(n.t.toFixed(1) + " s · " + n.note + " after " + n.addition + (n.why ? ": " + n.why : ""))}" x="${tx(n.t)}" y="${y + 15}" text-anchor="middle" font-size="13" font-weight="700" fill="${n.note === "uptake" ? "#2a9d6a" : "#999"}">${n.note === "uptake" ? "✓" : "✗"}</text>`;
+    if (showSim) for (const r of (D.sim || []).filter(r => r.track_id === id))
+      s += `<circle data-tip="${esc(r.t.toFixed(1) + " s · [sim] " + r.reaction)}" cx="${tx(r.t)}" cy="${y + 3}" r="3" fill="none" stroke="var(--muted)"/>`;
+  });
+  s += `<line id="playhead" x1="0" y1="${TOP - 6}" x2="0" y2="${H - 16}" stroke="var(--accent)" stroke-width="2"/>`;
+  tl.innerHTML = s;
+}
+tl.addEventListener("mousemove", ev => {
+  const d = ev.target.getAttribute && ev.target.getAttribute("data-tip");
+  if (d) { tip.textContent = d; tip.style.display = "block"; tip.style.left = Math.min(ev.clientX + 12, innerWidth - 430) + "px"; tip.style.top = (ev.clientY + 14) + "px"; }
+  else tip.style.display = "none";
+});
+tl.addEventListener("mouseleave", () => tip.style.display = "none");
+tl.addEventListener("click", ev => { const r = tl.getBoundingClientRect(); seek(((ev.clientX - r.left) - LEFT) / (tlW - LEFT - 12) * T_END); });
+
+// ------------------------------------------------------------------ playback
+let t = 0, playing = false, lastTs = null;
+const scrub = document.getElementById("scrub"), playBtn = document.getElementById("play");
+scrub.max = T_END;
+function seek(nt) { t = Math.max(0, Math.min(T_END, nt)); render(); }
+function render() {
+  drawMap(t); drawPanel(t); scrub.value = t;
+  const ph = document.getElementById("playhead"); if (ph) { ph.setAttribute("x1", tx(t)); ph.setAttribute("x2", tx(t)); }
+}
+function tick(ts) {
+  if (!playing) return;
+  if (lastTs != null) t += (ts - lastTs) / 1000 * +document.getElementById("speed").value;
+  lastTs = ts;
+  if (t >= T_END) { t = T_END; setPlaying(false); }
+  render(); requestAnimationFrame(tick);
+}
+function setPlaying(p) { playing = p; playBtn.textContent = p ? "Pause" : "Play"; lastTs = null; if (p) { if (t >= T_END) t = 0; requestAnimationFrame(tick); } }
+playBtn.onclick = () => setPlaying(!playing);
+scrub.oninput = () => seek(+scrub.value);
+document.getElementById("showgaze").onchange = () => { drawTimeline(); render(); };
+document.getElementById("showsim").onchange = () => { drawTimeline(); render(); };
+addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" && e.target.type === "range") return;
+  if (e.code === "Space") { e.preventDefault(); setPlaying(!playing); }
+  if (e.code === "ArrowRight") seek(t + (e.shiftKey ? 10 : 1));
+  if (e.code === "ArrowLeft") seek(t - (e.shiftKey ? 10 : 1));
+});
+document.getElementById("export").onclick = () => {
+  const blob = new Blob([`<?xml version="1.0" encoding="UTF-8"?>\n` + map.outerHTML], { type: "image/svg+xml" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `${D.meta.scenario}_t${t.toFixed(0)}.svg`; a.click(); URL.revokeObjectURL(a.href);
+};
+addEventListener("resize", () => { drawTimeline(); render(); });
+
+document.getElementById("sub").textContent =
+  `${D.meta.scenario} · stop: ${stop.name} · ${T_END} s · ${visitorIds.length} visitors · tracks + events only (no video)`;
+document.getElementById("legend").innerHTML =
+  Object.entries(KIND).map(([k, c]) => `<span><i style="background:${c}"></i>${k.replace("_", "/")}</span>`).join("") +
+  Object.entries({ "core": SAY.core, "addition": SAY.add, "answer": SAY.qa }).map(([k, c]) => `<span><i style="background:${c}"></i>robot: ${k}</span>`).join("") +
+  `<span><i style="background:#d9e6f5"></i>viewing formation</span><span>filled = in formation</span><span><b style="color:#e76f51">- -</b> view blocked</span><span><b style="color:#2f6fdf">—</b> robot gaze</span><span><b style="color:#d62828">|</b> exclusion fix</span><span><b style="color:#2a9d6a">✓</b>/<b style="color:#999">✗</b> uptake / none</span><span>○ sim reaction</span>`;
+const startT = +(new URLSearchParams(location.search).get("t") || 0);
+drawTimeline(); drawMeasures(); seek(startT);
+</script>
+</body>
+</html>
