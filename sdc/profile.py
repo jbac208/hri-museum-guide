@@ -58,7 +58,8 @@ class VisitorProfile:
 
 
 class ProfileStore:
-    def __init__(self, start_impression=None):
+    def __init__(self, start_impression=None, lam=None):
+        self.lam = C.LAMBDA_DOMINANCE if lam is None else lam      # D8 (0 in the engagement baseline)
         self.visitors = {}
         self.log = []
         self._ids = itertools.count(1)
@@ -92,7 +93,7 @@ class ProfileStore:
 
     def weight(self, tid):
         """D8: w_i = 1 / (1 + λ·k_i)."""
-        return 1.0 / (1.0 + C.LAMBDA_DOMINANCE * self._visitor(tid).credit)
+        return 1.0 / (1.0 + self.lam * self._visitor(tid).credit)
 
     def cluster(self, cluster_id):
         return [v.track_id for v in self.visitors.values() if v.cluster_id == cluster_id]

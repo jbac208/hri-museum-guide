@@ -20,19 +20,21 @@ from .adapter import Frame, StartImpression, Utterance
 from .decision import Action, ACTION_KINDS, StopController, plan_next_stop
 from . import metrics
 from .metrics import EventLog
+from .policies import OURS
 from .profile import ProfileStore
 from .signals import SignalLayer
 
 
 class Tour:
-    def __init__(self, gallery, first_stop, stop_durations, contents=None, scenario="?"):
+    def __init__(self, gallery, first_stop, stop_durations, contents=None, scenario="?", policy=OURS):
+        self.policy = policy
         self.gallery = gallery
         self.ex = {e["id"]: e for e in gallery["exhibits"]}
         self.names = {e["id"]: e["name"] for e in gallery["exhibits"]}
         self.contents = contents or content.load_all(gallery)
         self.durations = list(stop_durations)
         self.signals = SignalLayer(gallery, first_stop, 0)
-        self.profile = ProfileStore()
+        self.profile = ProfileStore(lam=policy.lam)
         self.log = EventLog(scenario, first_stop, gallery["id"], None)
         self.used = set()
         self.visited = [first_stop]
@@ -63,7 +65,7 @@ class Tour:
     # ------------------------------------------------------------ helpers
     def _new_ctrl(self, stop, t, pose, depth):
         c = StopController(stop, self.contents[stop], self.gallery, self.profile, t, self.durations[self.k],
-                           self.used, robot_pose=pose, stop_index=self.k, depth=depth)
+                           self.used, robot_pose=pose, stop_index=self.k, depth=depth, policy=self.policy)
         c.dwell_of = lambda tid: (self.signals.v[tid].dwell.value if tid in self.signals.v else None)
         self._ctrl_seen = 0
         return c
@@ -136,7 +138,7 @@ class Tour:
     def _between(self, t):
         summary = dict(self.ctrl.summary, fell_behind=self.fell_behind)
         self.profile.end_stop(t)
-        plan = plan_next_stop(self.ctrl.stop, self.gallery, self.profile, self.visited, summary)
+        plan = plan_next_stop(self.ctrl.stop, self.gallery, self.profile, self.visited, summary, self.policy)
         plan["t"] = round(t, 2)
         plan["after"] = self.ctrl.stop
         self.plans.append(plan)
@@ -211,7 +213,7 @@ class Tour:
             self.fell_behind = True
             self._note(ev.t_detect, "falling behind", track_id=ev.track_id, why=ev.reason)
             m = self.move
-            if not m["slow"] and not m["arrived"]:
+            if self.policy.floor_on_moves and not m["slow"] and not m["arrived"]:
                 m["slow"] = True
                 # re-plan the rest of the walk at the slower speed
                 a = next(x for x in reversed(self._actions) if x.kind == "step_to")
@@ -240,14 +242,15 @@ class Tour:
         e = self.ex[m["next"]]
         far = [tid for tid, o in f.visitors.items() if math.hypot(o.x - e["x"], o.y - e["y"]) > C.ARRIVE_RADIUS_M]
         waited = f.t - m["arrive_t"]
-        if far and waited < C.WAIT_MAX_S:
+        if far and waited < C.WAIT_MAX_S and self.policy.floor_on_moves:
             return
         if waited > 0.5:
             self._act(m["arrive_t"], "pause", {"s": round(waited, 1)},
                       "waited at the next stop until everyone arrived before starting (§4)", round(waited, 1))
         if far:
             self._note(f.t, "started without everyone (WAIT_MAX_S)", missing=far, stop=m["next"],
-                       why=f"waited WAIT_MAX_S={C.WAIT_MAX_S}s; late arrivals are left to the exclusion handler (Q17)")
+                       why=(f"waited WAIT_MAX_S={C.WAIT_MAX_S}s; late arrivals are left to the exclusion handler (Q17)"
+                            if self.policy.floor_on_moves else f"{self.policy.name} baseline doesn't wait for everyone"))
         self.k += 1
         nxt = m["next"]
         self.visited.append(nxt)

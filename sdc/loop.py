@@ -7,18 +7,22 @@ from . import metrics
 from .metrics import EventLog
 from .adapter import Frame, StartImpression, Utterance
 from .decision import StopController, plan_next_stop
+from .policies import OURS
 from .profile import ProfileStore
 from .signals import SignalLayer
 
 
 class Loop:
-    def __init__(self, gallery, stop, duration_s, stop_index=0, contents=None, t_start=0.0, scenario="?"):
+    def __init__(self, gallery, stop, duration_s, stop_index=0, contents=None, t_start=0.0, scenario="?",
+                 policy=OURS):
+        self.policy = policy
         self.gallery = gallery
         self.log = EventLog(scenario, stop, gallery["id"], duration_s)
         self.contents = contents or content.load_all(gallery)
         self.signals = SignalLayer(gallery, stop, stop_index)
-        self.profile = ProfileStore()
-        self.ctrl = StopController(stop, self.contents[stop], gallery, self.profile, t_start, duration_s)
+        self.profile = ProfileStore(lam=policy.lam)
+        self.ctrl = StopController(stop, self.contents[stop], gallery, self.profile, t_start, duration_s,
+                                   policy=policy)
         self.ctrl.dwell_of = lambda tid: (self.signals.v[tid].dwell.value if tid in self.signals.v else None)
         self.stop, self.visited = stop, [stop]
         self._seen = set()
@@ -48,7 +52,7 @@ class Loop:
         summary = self.ctrl.end_stop(self.t)          # first: stream end is not a resolution
         self._dispatch(self.signals.finish())
         self.profile.end_stop(self.t)
-        self.plan = plan_next_stop(self.stop, self.gallery, self.profile, self.visited, summary)
+        self.plan = plan_next_stop(self.stop, self.gallery, self.profile, self.visited, summary, self.policy)
         if self.plan["offer_choice"]:
             names = {e["id"]: e["name"].lower() for e in self.gallery["exhibits"]}
             a, b = self.plan["choice"]

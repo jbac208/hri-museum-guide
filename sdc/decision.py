@@ -33,6 +33,7 @@ from dataclasses import dataclass
 
 from . import config as C
 from .content import speech_s
+from .policies import OURS
 
 ACTION_KINDS = {"say_to_group", "gaze_at", "turn_body", "step_to", "pause", "slow_down"}
 
@@ -60,23 +61,33 @@ def _centroid(obs):
 
 # ---------------------------------------------------------------- addition selector (§5)
 
-def score_addition(a, profile):
+def _strength(l, policy):
+    if policy.pending_full and l.status == "pending":
+        return 1.0
+    return l.strength
+
+
+def score_addition(a, profile, policy=OURS):
     """Returns (score, {track_id: (w_i, s_i, [layers])}) for visitors with s_i(a) > 0."""
     per = {}
     for tid, v in profile.visitors.items():
-        layers = [l for l in v.layers.values() if l.strength > 0 and a.serves_layer(l.kind, l.target)]
+        layers = [l for l in v.layers.values() if _strength(l, policy) > 0 and a.serves_layer(l.kind, l.target)]
         if layers:
-            per[tid] = (profile.weight(tid), min(1.0, sum(l.strength for l in layers)), layers)
+            per[tid] = (profile.weight(tid), min(1.0, sum(_strength(l, policy) for l in layers)), layers)
     return sum(w * s for w, s, _ in per.values()), per
 
 
-def select_addition(exhibit, profile, used):
-    """Best unused addition at or above threshold, or None. Ties keep the content file's order."""
+def select_addition(exhibit, profile, used, policy=OURS):
+    """Best unused addition at or above threshold, or None. Ties keep the content file's order.
+    The one-size baseline takes the next unused addition in content order, addressed to no one."""
+    if policy.additions == "fixed":
+        a = next((x for x in exhibit.additions if x.id not in used), None)
+        return (a, 0.0, {}) if a else None
     best = None
     for a in exhibit.additions:
         if a.id in used:
             continue
-        score, per = score_addition(a, profile)
+        score, per = score_addition(a, profile, policy)
         if score >= C.ADDITION_THRESHOLD and (best is None or score > best[1] + 1e-9):
             best = (a, score, per)
     return best
@@ -160,8 +171,9 @@ class UptakeWindow:
 
 class StopController:
     def __init__(self, stop, exhibit, gallery, profile, t_start, duration_s, used_additions=None,
-                 robot_pose=None, stop_index=0, depth="same"):
+                 robot_pose=None, stop_index=0, depth="same", policy=OURS):
         self.stop, self.ex, self.gallery, self.profile = stop, exhibit, gallery, profile
+        self.policy = policy
         e = next(x for x in gallery["exhibits"] if x["id"] == stop)
         self.stop_xy = (e["x"], e["y"])
         self.t_start, self.t_end = t_start, t_start + duration_s
@@ -228,8 +240,9 @@ class StopController:
             if started:
                 self._note(t, "exclusion episode start", track_id=ev.track_id, barriers=ev.detail, why=ev.reason)
                 self.episodes[ev.track_id] = {"t0": ev.t_detect, "fixed": set(), "turned_t": None}
-                for b in ev.detail.split(","):
-                    self._fix(t, ev.track_id, b)
+                if self.policy.handle_exclusion:
+                    for b in ev.detail.split(","):
+                        self._fix(t, ev.track_id, b)
             else:
                 ep = self.episodes.pop(ev.track_id, None)
                 if ep:
@@ -238,7 +251,8 @@ class StopController:
                     self._note(ev.t1, "exclusion episode resolved", track_id=ev.track_id,
                                time_to_resolve_s=round(ev.t1 - ep["t0"], 2))
         elif ev.kind == "barrier" and started and ev.track_id in self.episodes:
-            self._fix(t, ev.track_id, ev.detail)
+            if self.policy.handle_exclusion:
+                self._fix(t, ev.track_id, ev.detail)
         elif started and ev.kind in ("linger", "approach", "drift", "point_ask"):
             self.steering_signals.append(ev)
         if started and ev.kind == "fatigue":
@@ -436,7 +450,7 @@ class StopController:
                 return
             self.phase = "respond"
             self._note(t, "phase respond")
-        if self.phase == "respond" and self.uptake is None and self.additions_done < C.MAX_ADDITIONS_PER_STOP:
+        if self.phase == "respond" and self.uptake is None and self.additions_done < self.policy.max_additions:
             self._try_addition(t)
 
     def _answer(self, t, u):
@@ -450,12 +464,19 @@ class StopController:
                    wait_s=round(t + C.ACK_GAZE_S - u.t, 2))
 
     def _try_addition(self, t):
-        best = select_addition(self.ex, self.profile, self.used)
+        best = select_addition(self.ex, self.profile, self.used, self.policy)
         if best is None:
             return
         a, score, per = best
         dur = C.ACK_GAZE_S + a.duration_s
         if not self._fits(t, dur):
+            return
+        if not per:                                   # one-size baseline: the script's next addition
+            say = self._say(t, a.text, "fixed script: next addition in content order (one-size-fits-all)",
+                            [(0.5, a.look, "addition: look at its target")], a.id)
+            self.used.add(a.id)
+            self.additions_done += 1
+            self._note(say.t, "addition", addition=a.id, score=0.0, addressed={})
             return
         top = max(per, key=lambda tid: per[tid][0] * per[tid][1])
         terms = " + ".join(f"{w:.2f}·{s:.2f} ({tid})" for tid, (w, s, _) in sorted(per.items()))
@@ -497,8 +518,20 @@ class StopController:
                 self._note(t, "uptake window cut by stop end: layers stay pending", track_id=tid, addition=w.a.id)
 
     def _gaze_balance(self, t):
+        if self.policy.gaze == "exhibit":
+            return                                     # one-size baseline: gaze stays on the exhibit and cues
         if t - self.last_gaze_t < C.GAZE_SHIFT_S or any(s[0] - t < 1.0 for s in self.scheduled):
             return
+        if self.policy.gaze == "engaged":
+            sig = {}
+            for e in self.steering_signals:
+                sig[e.track_id] = sig.get(e.track_id, 0) + 1
+            if sig:
+                tid = max(sig, key=lambda v: (sig[v], self.profile.credit(v), v))
+                if self.gaze is None or self.gaze[0] != f"visitor:{tid}":
+                    self._act(t, "gaze_at", {"target": f"visitor:{tid}"},
+                              "gaze on the most engaged visitor (engagement baseline)")
+                return
         current = self.gaze[0] if self.gaze else None
         cands = [tid for tid in self.frame.visitors if f"visitor:{tid}" != current]
         if not cands:
@@ -538,7 +571,7 @@ def _serves_exhibit(layer, eid):
     return layer.target == eid
 
 
-def plan_next_stop(stop, gallery, profile, visited, summary):
+def plan_next_stop(stop, gallery, profile, visited, summary, policy=OURS):
     """Pace, depth and next stop. Next stop: the route option with the best weighted score over
     confirmed layers (same weights as §5). There is no per-option exclusion filter (Joey, 2026-11-12:
     not core to the concept); D1's floor is kept within stops by the exclusion handler (P13).
@@ -547,7 +580,10 @@ def plan_next_stop(stop, gallery, profile, visited, summary):
     n = max(1, len(profile.visitors))
     share_tired = len(summary["fatigued"]) / n
     behind = bool(summary["exclusion_unresolved"]) or bool(summary.get("fell_behind"))
-    if share_tired >= C.PACE_FATIGUE_SHARE or behind:
+    if not policy.adapt_pace_depth:
+        pace, depth = "same", "same"
+        reasons.append("pace and depth fixed (one-size baseline)")
+    elif share_tired >= C.PACE_FATIGUE_SHARE or (behind and policy.floor_on_moves):
         pace = "slower"
         if share_tired >= C.PACE_FATIGUE_SHARE:
             reasons.append(f"pace slower: {share_tired:.0%} of the group showed fatigue (≥ PACE_FATIGUE_SHARE={C.PACE_FATIGUE_SHARE})")
@@ -558,10 +594,11 @@ def plan_next_stop(stop, gallery, profile, visited, summary):
     else:
         pace = "same"
         reasons.append(f"pace same: {share_tired:.0%} showed fatigue (< PACE_FATIGUE_SHARE)")
-    deep = sum(1 for v in profile.visitors.values()
-               if any(l.kind == "depth" and l.status == "confirmed" for l in v.layers.values()))
-    depth = "raised" if deep / n > C.DEPTH_RAISE_SHARE else "same"
-    reasons.append(f"depth {depth}: {deep}/{n} have a confirmed depth layer (raise if > DEPTH_RAISE_SHARE)")
+    if policy.adapt_pace_depth:
+        deep = sum(1 for v in profile.visitors.values()
+                   if any(l.kind == "depth" and l.status == "confirmed" for l in v.layers.values()))
+        depth = "raised" if deep / n > C.DEPTH_RAISE_SHARE else "same"
+        reasons.append(f"depth {depth}: {deep}/{n} have a confirmed depth layer (raise if > DEPTH_RAISE_SHARE)")
 
     options = [o for o in gallery["route"]["branches"].get(stop, []) if o not in visited]
     if not options:
@@ -571,12 +608,17 @@ def plan_next_stop(stop, gallery, profile, visited, summary):
     for o in options:
         s = 0.0
         for tid, v in profile.visitors.items():
-            si = min(1.0, sum(1.0 for l in v.layers.values() if l.status == "confirmed" and _serves_exhibit(l, o)))
+            counted = ("confirmed", "pending") if policy.next_stop == "engagement" else ("confirmed",)
+            si = min(1.0, sum(1.0 for l in v.layers.values() if l.status in counted and _serves_exhibit(l, o)))
             s += profile.weight(tid) * si
         scores[o] = round(s, 3)
+    if policy.next_stop == "route":
+        return {"next": options[0], "pace": pace, "depth": depth, "scores": {}, "offer_choice": False,
+                "choice": None, "reasons": reasons + [f"next {options[0]}: fixed route order (one-size baseline)"]}
     ranked = sorted(options, key=lambda o: (-scores[o], options.index(o)))
     nxt = ranked[0]
-    close = len(ranked) > 1 and scores[ranked[0]] - scores[ranked[1]] <= C.NEXT_STOP_CLOSE
+    close = (policy.two_way_choice and len(ranked) > 1
+             and scores[ranked[0]] - scores[ranked[1]] <= C.NEXT_STOP_CLOSE)
     if close:
         reasons.append(f"weighted confirmed-interest scores {scores}: top two within NEXT_STOP_CLOSE="
                        f"{C.NEXT_STOP_CLOSE}, so offer a two-way choice between {ranked[0]} and {ranked[1]} (P12)")
