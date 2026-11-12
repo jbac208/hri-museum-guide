@@ -50,7 +50,8 @@ def main():
     print("weights:", {t: round(tour.profile.weight(t), 2) for t in tour.profile.visitors})
     print("measures:", json.dumps({k: v for k, v in m.items() if k not in ("type", "t")}, default=str)[:900])
     if a.log:
-        metrics.write(metrics.anonymise(recs) if a.anon else recs, a.log)
+        kept = tour.end_tour()                       # Q13: what's kept after the tour has no visitor speech
+        metrics.write(metrics.anonymise(kept) if a.anon else kept, a.log)
 
 
 if __name__ == "__main__":

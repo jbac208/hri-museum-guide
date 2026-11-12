@@ -34,11 +34,17 @@ def test_log_shape():
     assert abs(len(tracks) - tracks[-1]["t"] * C.LOG_TRACK_HZ) <= 1.5      # the stop may overrun (Q11)
 
 
-def test_no_visitor_speech_text_in_log():
+def test_speech_kept_live_and_stripped_at_tour_end():
+    """Q13: the live log keeps question text; end_tour() returns a copy without it and wipes state."""
     utterances = [s.text for v in scenarios.s1_one_stop().visitors for s in v.speech]
-    blob = json.dumps(RECS)
+    loop, live = closed()
+    assert any(u in json.dumps(live) for u in utterances)
+    kept = loop.end_tour()
+    blob = json.dumps(kept) + json.dumps([e.reason for e in loop.signals.events])
     for u in utterances:
         assert u not in blob, u
+    assert loop.profile.visitors == {} and loop.signals.v == {}
+    assert metrics.measures(kept[:-1]) == {k: v for k, v in kept[-1].items() if k not in ("type", "t")}
 
 
 def test_measures_from_log_alone():

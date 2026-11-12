@@ -19,19 +19,20 @@ TEMPLATE = os.path.join(HERE, "viz", "replay_template.html")
 
 
 def records_for(name):
-    """(records, sim reactions) for a scenario name: SIM scenarios run closed loop, ALL open loop."""
+    """(records, sim reactions) for a scenario name. The replay is kept after the tour, so it is built
+    from the end-of-tour log (visitor speech stripped, Q13)."""
     if name in scenarios.SIM:
         import run_sim
         loop, sim, _, _ = run_sim.run(name)
-        return loop.records(), sim.reactions
+        return loop.end_tour(), sim.reactions
     if name in scenarios.TOUR:
         import run_tour
         tour, sim, _, _ = run_tour.run(name)
-        return tour.records(), sim.reactions
+        return tour.end_tour(), sim.reactions
     if name in scenarios.ALL:
         import run_loop
         loop, _ = run_loop.run(name)
-        return loop.records(), []
+        return loop.end_tour(), []
     sys.exit(f"unknown scenario {name}; choose from {sorted(scenarios.SIM) + sorted(scenarios.TOUR) + sorted(scenarios.ALL)}")
 
 

@@ -106,9 +106,9 @@ def test_measures_per_stop():
 
 def test_privacy_end_tour():
     t, *_ = run()
-    t.records()
-    t.end_tour()
-    assert t.profile.visitors == {} and t.profile.layers() == []
+    kept = t.end_tour()
+    assert t.profile.visitors == {} and t.profile.layers() == [] and t.signals.v == {}
+    assert "[speech]" in json.dumps(kept) and "Whose chest was it?" not in json.dumps(kept)
 
 
 def test_replay_builds_for_tour():

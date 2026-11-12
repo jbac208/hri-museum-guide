@@ -61,7 +61,8 @@ def main():
     print(f"  P13 unresolved   {m['p13_unresolved']['share']} {m['p13_unresolved']['visitors_with_unresolved']}")
     if a.log:
         from sdc import metrics
-        metrics.write(metrics.anonymise(recs) if a.anon else recs, a.log)
+        kept = loop.end_tour()                       # Q13: what's kept after the tour has no visitor speech
+        metrics.write(metrics.anonymise(kept) if a.anon else kept, a.log)
     if a.json:
         json.dump({"log": loop.ctrl.log, "profile": loop.profile.log, **out}, open(a.json, "w"), indent=1)
 

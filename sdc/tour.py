@@ -18,6 +18,7 @@ import math
 from . import config as C, content
 from .adapter import Frame, StartImpression, Utterance
 from .decision import Action, ACTION_KINDS, StopController, plan_next_stop
+from . import metrics
 from .metrics import EventLog
 from .profile import ProfileStore
 from .signals import SignalLayer
@@ -257,5 +258,12 @@ class Tour:
         self._sync()
 
     def end_tour(self):
-        """Privacy: discard all per-visitor state (after records() has been taken)."""
-        return self.profile.end_tour(self.t)
+        """Privacy (Q13): return the log to keep, with visitor speech stripped, then discard all
+        per-visitor state (profile layers, credit, baselines) and scrub speech from live events."""
+        kept = metrics.redact_speech(self.records())
+        for ev in self.signals.events:
+            ev.reason = metrics.redact_speech(ev.reason)
+        self.signals.v.clear()
+        self.profile.end_tour(self.t)
+        self.ended = True
+        return kept

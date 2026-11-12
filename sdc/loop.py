@@ -3,6 +3,7 @@
 Open-loop on mock streams for now (visitors don't react to the robot; task 5 closes the loop).
 """
 from . import content
+from . import metrics
 from .metrics import EventLog
 from .adapter import Frame, StartImpression, Utterance
 from .decision import StopController, plan_next_stop
@@ -75,3 +76,14 @@ class Loop:
     @property
     def plans(self):
         return [self.plan] if self.plan else []
+
+    def end_tour(self):
+        """Privacy (Q13): return the log to keep, with visitor speech stripped, then discard all
+        per-visitor state (profile layers, credit, baselines) and scrub speech from live events."""
+        kept = metrics.redact_speech(self.records())
+        for ev in self.signals.events:
+            ev.reason = metrics.redact_speech(ev.reason)
+        self.signals.v.clear()
+        self.profile.end_tour(self.t)
+        self.ended = True
+        return kept

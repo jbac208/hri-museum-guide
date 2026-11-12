@@ -18,8 +18,10 @@ The four live measures (Perception & decision loop §7) + the P13 headline, all 
   dominance_share  share of acted-on signals that came from the single most-acted-on visitor (D8)
   p13_unresolved   share of visitors with >= 1 exclusion episode unresolved at stop end (should be 0)
 
-Privacy: question text is redacted from reasons; anonymise() maps track and cluster ids to
-neutral labels (P1.., G1..) for anything kept after the tour.
+Privacy (Q13, Joey 2026-11-12): during the tour the live log keeps visitors' question text (for
+debugging); at tour end, end_tour() strips it (redact_speech) and discards per-visitor state, so
+anything kept or written after the tour has no visitor speech. anonymise() additionally maps track
+and cluster ids to neutral labels (P1.., G1..).
 """
 import json
 import re
@@ -29,13 +31,14 @@ from . import config as C
 _QUOTED = re.compile(r'"[^"]*"')
 
 
-def _redact(o):
+def redact_speech(o):
+    """Replace quoted visitor speech in every string with "[speech]" (records, lists or strings)."""
     if isinstance(o, str):
         return _QUOTED.sub('"[speech]"', o)
     if isinstance(o, dict):
-        return {k: _redact(v) for k, v in o.items()}
+        return {k: redact_speech(v) for k, v in o.items()}
     if isinstance(o, list):
-        return [_redact(v) for v in o]
+        return [redact_speech(v) for v in o]
     return o
 
 
@@ -65,7 +68,8 @@ class EventLog:
             self.event_layer[id(ev)] = layer
 
     def records(self, loop):
-        """All records, time-ordered, ending with the measures."""
+        """All records, time-ordered, ending with the measures. This is the live log: it still holds
+        question text. Use the copy end_tour() returns for anything kept after the tour."""
         recs = [self.meta] + self.tracks
         for ev in loop.signals.events:
             recs.append({"type": "event", "t": ev.t_detect, **ev.as_dict(), "layer": self.event_layer.get(id(ev))})
@@ -73,7 +77,6 @@ class EventLog:
         recs += [dict(e) for e in loop.decision_log()]
         for plan in loop.plans:
             recs.append({"type": "note", "note": "plan", **plan, "t": plan.get("t", loop.t)})
-        recs = [_redact(r) for r in recs]
         if recs[0].get("duration_s") is None:
             recs[0] = dict(recs[0], duration_s=round(max(r["t"] for r in recs), 1))
         recs.sort(key=lambda r: (r["t"], r["type"] != "meta"))
