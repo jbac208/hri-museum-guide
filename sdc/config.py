@@ -115,7 +115,8 @@ UPTAKE_DWELL_FACTOR = 2.0       # ... and at least this many times the visitor's
 UPTAKE_LOOK_GAP_S = 0.3         # glances away shorter than this don't break a look
 UPTAKE_STEP_M = 0.2             # stepping this much closer to the addition's exhibit is uptake
 UPTAKE_SETTLE_SPEED_MPS = 0.04  # ... measured from where they stand once a move already under way slows below this
-CREDIT_PER_ACTED_SIGNAL = 1.0   # k_i grows by this when the robot visibly acts on i's signal (answer, confirmed layer)
+CREDIT_PER_ACTED_SIGNAL = 1.0   # k_i grows by this when the robot visibly acts on i's signal: answers their question, or
+                                # delivers an addition driven by their layer, taken up or not (Joey, 2026-11-12)
 # between-stop planner (§6)
 PACE_FATIGUE_SHARE = 0.3        # slow down if at least this share of the group showed fatigue
 DEPTH_RAISE_SHARE = 0.5         # raise default depth if more than this share has a confirmed depth layer

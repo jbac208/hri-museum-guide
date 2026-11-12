@@ -11,8 +11,9 @@ Created by signal events (config.LAYER_FROM_EVENT):
   Start-impression layers from Jay's half -> pending.
 Fatigue, bid, barrier and excluded create no layers (they feed pace and the exclusion handler).
 
-The decision layer (task 4) calls confirm / rescind after the uptake window and add_credit
-when it visibly acts on a visitor's signal; weight() is D8's w_i = 1 / (1 + λ k_i).
+The decision layer (task 4) calls confirm / rescind after the uptake window, and add_credit
+when it visibly acts on a visitor's signal (answers it, or delivers an addition it drove);
+weight() is D8's w_i = 1 / (1 + λ k_i).
 
 D6: a rescinded layer is not reopened by more of the same evidence during the stop.
 Between stops (end_stop) rescinded layers are removed (§6.1); untested pending ones stay.

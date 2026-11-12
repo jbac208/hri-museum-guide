@@ -17,7 +17,9 @@ In the respond phase:
                      reaches ADDITION_THRESHOLD; at most MAX_ADDITIONS_PER_STOP (P11); never repeat one.
                      Facing the companion cluster of the visitor it serves most (§5).
   uptake monitor     for UPTAKE_WINDOW_S after the addition: look at its target, step closer, or ask
-                     -> confirm the pending layers it tested + credit; nothing -> rescind them (D6).
+                     -> confirm the pending layers it tested; nothing -> rescind them (D6).
+  steering credit    k_i += 1 whenever the robot visibly acts on i's signal: answering their question, or
+                     delivering an addition driven by their layer (taken up or not) (loop doc §1, D3, D8).
 Reserved visitors produce no events, so they get nothing beyond gaze balancing (D2).
 
 Between stops, plan_next_stop() picks pace, depth and the next stop (§6, D1).
@@ -430,6 +432,8 @@ class StopController:
         say = self._say(t + C.ACK_GAZE_S, a.text, reason, [(0.5, a.look, "addition: look at its target")], a.id)
         self.used.add(a.id)
         self.additions_done += 1
+        for tid in sorted(per):
+            self.profile.add_credit(tid, say.t, f"signal acted on: addition {a.id} delivered", C.CREDIT_PER_ACTED_SIGNAL)
         self._note(say.t, "addition", addition=a.id, score=round(score, 3),
                    addressed={tid: [l.id for l in layers] for tid, (_, _, layers) in per.items()})
         self.uptake = UptakeWindow(a, say.t, say.t + a.duration_s + C.UPTAKE_WINDOW_S, per, self.gallery, self.frame,
@@ -443,7 +447,6 @@ class StopController:
             if why:
                 for l in pending:
                     self.profile.confirm(l.id, t, f"uptake after {w.a.id}: {why}")
-                self.profile.add_credit(tid, t, f"addition {w.a.id} taken up", C.CREDIT_PER_ACTED_SIGNAL)
                 self._note(t, "uptake", track_id=tid, addition=w.a.id, why=why,
                            confirmed=[l.id for l in pending])
             elif complete:

@@ -83,6 +83,16 @@ def test_gaze_reaches_everyone():
     assert gazed == {v.track_id for v in SCN.visitors}
 
 
+def test_credit_on_delivery_even_without_uptake():
+    """Q10: every addressed visitor gets +1 when an addition is delivered, taken up or not."""
+    adds = [n for n in NOTES if n["note"] == "addition"]
+    for n in adds:
+        for tid in n["addressed"]:
+            assert any(p["op"] == "credit" and p["track_id"] == tid and abs(p["t"] - n["t"]) < 1e-6
+                       and n["addition"] in p["reason"] for p in LOOP.profile.log), (tid, n["addition"])
+    assert not any(p["op"] == "credit" and "taken up" in p["reason"] for p in LOOP.profile.log)
+
+
 def test_plan_has_next_stop():
     assert OUT["plan"]["next"] in GALLERY["route"]["branches"]["figurehead"]
 
@@ -123,7 +133,7 @@ def test_uptake_confirms_or_rescinds():
         ctrl.uptake = w
         ctrl._close_uptake(12.0)
         (l,) = ps.layers("v4")
-        assert l.status == want and (ps.credit("v4") > 0) == (want == "confirmed")
+        assert l.status == want and ps.credit("v4") == 0     # credit comes at delivery, not at uptake (Q10)
 
 
 def test_uptake_by_question():
