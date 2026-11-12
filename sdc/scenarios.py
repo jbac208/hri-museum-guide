@@ -127,5 +127,50 @@ def s1_closed():
     )
 
 
+def s2_multi_stop():
+    """Three stops, closed loop. Same six people.
+    stop 1 figurehead: baseline learning (start-impression seed still weighted); v1 lingers on the
+        carving, v5 drifts toward the ship model and takes up its preview -> confirmed interest,
+        so the between-stop choice is the ship model by D1 (no two-way offer).
+    stop 2 ship model: v2 ends up behind their parent (blocked, outside the formation), edges in and
+        glances -> excluded -> the robot opens the formation; v2 later interrupts with a question.
+        v1 steps closer (depth); v6 leans (tired); v3 keeps asking.
+    choice 2: compass and sea chest both have no confirmed interest -> P12 two-way offer; v2, v4, v5
+        turn toward the sea chest, v1 and v3 toward the compass; v3's weight is low (D8) -> sea chest.
+    move 2: v6 walks slowly and falls behind -> the robot slows down and waits at the sea chest.
+    stop 3 sea chest: the seed no longer counts (own baselines only); v2 lingers on the painted lid.
+    """
+    from .sim import RelWindow as W, SimSpeech as Q, TourSpec, TourVisitor as V
+    glance = {"robot": 0.55, "exhibit": 0.35, "companion": 0.10}
+    vs = [
+        V("v1", "adult", 1.78, "c1", slot=(-130, 2.2), responded_to_steer_invite=True,
+          interests={("feature_interest", "figurehead.carving"), ("depth", "figurehead"), ("depth", "ship_model"),
+                     ("exhibit_interest", "compass")},
+          windows={0: [W(68, 118, attention="feature:figurehead.carving")]},
+          moves={1: [(60, 8, (-130, 1.5))]}),
+        V("v2", "child", 1.20, "c2", slot=(-80, 2.0), age_conf=0.85, slots={1: (-95, 3.0)},
+          interests={("feature_interest", "sea_chest.lid"), ("exhibit_interest", "sea_chest")},
+          windows={1: [W(20, 50, gaze_mix=glance, robot_glance_s=(0.3, 0.8))],
+                   2: [W(40, 75, attention="feature:sea_chest.lid")]},
+          moves={1: [(20, 10, (-95, 2.75))]},
+          join={1: (-80, 2.0)},
+          speech={1: [Q(55, 1.8, "How many sailors were on it?", mode="interrupt")]}),
+        V("v3", "adult", 1.80, "c2", slot=(-95, 2.2), responded_to_steer_invite=True,
+          interests={("feature_interest", "figurehead.paint"), ("exhibit_interest", "compass")},
+          speech={0: [Q(75, 2.5, "Is that the original paint?"), Q(95, 2.0, "How old is it?")],
+                  1: [Q(70, 2.0, "How big was the real ship?"), Q(85, 2.0, "What happened to her?")],
+                  2: [Q(60, 2.0, "Whose chest was it?")]}),
+        V("v4", "adult", 1.68, "c3", slot=(-60, 2.3), gaze_mix={"exhibit": 0.8, "robot": 0.2},
+          interests={("exhibit_interest", "sea_chest")}),
+        V("v5", "adult", 1.72, "c4", slot=(-35, 2.2),
+          interests={("exhibit_interest", "ship_model"), ("exhibit_interest", "sea_chest")},
+          windows={0: [W(55, 115, attention="exhibit:ship_model", body_target="ship_model")]}),
+        V("v6", "adult", 1.65, "c4", slot=(-20, 2.3), walk_mps=0.3,
+          windows={1: [W(15, 110, posture="leaning")]}),
+    ]
+    return TourSpec("s2_multi_stop", "figurehead", [125, 115, 100], vs, max_duration_s=480)
+
+
 ALL = {"s1_one_stop": s1_one_stop}
+TOUR = {"s2_multi_stop": s2_multi_stop}
 SIM = {"s1_closed": s1_closed}

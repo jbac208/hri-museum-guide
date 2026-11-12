@@ -192,6 +192,14 @@ class World:
                                               [f["id"] for f in stop["features"]], scn.stop)
                      for v in scn.visitors}
 
+    def set_stop(self, exhibit_id):
+        """Multi-stop sim: line of sight, formation and default gaze now refer to this exhibit."""
+        stop = self.ex[exhibit_id]
+        self.scn.stop, self.stop_xy = exhibit_id, (stop["x"], stop["y"])
+        for g in self.gaze.values():
+            g.stop, g.features = exhibit_id, [f["id"] for f in stop["features"]]
+            g.until = -1.0
+
     def start_lines(self):
         scn = self.scn
         header = {"type": "header", "schema_version": schema.SCHEMA_VERSION, "rate_hz": scn.rate_hz,
