@@ -156,6 +156,14 @@ def test_planner_d1_and_pace():
     assert p["offer_choice"] and p["pace"] == "same"
 
 
+def test_planner_ignores_pending_guesses():
+    """Q12: only confirmed layers steer the next stop; a pending drift doesn't."""
+    ps = ProfileStore(SI)
+    ps.on_event(_ev("drift", "v5", "ship_model"), "figurehead")       # pending exhibit_interest:ship_model
+    p = plan_next_stop("figurehead", GALLERY, ps, ["figurehead"], {"fatigued": [], "exclusion_unresolved": []})
+    assert p["scores"] == {"ship_model": 0.0, "compass": 0.0} and p["offer_choice"]
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in list(globals().items()):
