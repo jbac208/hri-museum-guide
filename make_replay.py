@@ -24,11 +24,15 @@ def records_for(name):
         import run_sim
         loop, sim, _, _ = run_sim.run(name)
         return loop.records(), sim.reactions
+    if name in scenarios.TOUR:
+        import run_tour
+        tour, sim, _, _ = run_tour.run(name)
+        return tour.records(), sim.reactions
     if name in scenarios.ALL:
         import run_loop
         loop, _ = run_loop.run(name)
         return loop.records(), []
-    sys.exit(f"unknown scenario {name}; choose from {sorted(scenarios.SIM) + sorted(scenarios.ALL)}")
+    sys.exit(f"unknown scenario {name}; choose from {sorted(scenarios.SIM) + sorted(scenarios.TOUR) + sorted(scenarios.ALL)}")
 
 
 def build(records, sim=(), gallery=GALLERY):

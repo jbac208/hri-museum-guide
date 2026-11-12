@@ -106,7 +106,6 @@ const tracks = D.tracks, T_END = D.meta.duration_s;
 const ex = Object.fromEntries(D.gallery.exhibits.map(e => [e.id, e]));
 const feat = {};
 D.gallery.exhibits.forEach(e => e.features.forEach(f => feat[f.id] = f));
-const stop = ex[D.meta.stop];
 const visitorIds = [...new Set(tracks.flatMap(r => r.visitors.map(v => v.id)))].sort();
 const clusters = [...new Set(tracks[0].visitors.map(v => v.cluster))];
 const clusterOf = Object.fromEntries(tracks[0].visitors.map(v => [v.id, v.cluster]));
@@ -147,14 +146,46 @@ function layersAt(t) {
 }
 
 // ------------------------------------------------------------------ map
-const allX = [stop.x - stop.radius, stop.x + stop.radius], allY = [stop.y - stop.radius, stop.y + stop.radius];
-tracks.forEach(r => { r.visitors.forEach(v => { allX.push(v.x); allY.push(v.y); }); allX.push(r.robot.x); allY.push(r.robot.y); });
-actions.filter(a => a.kind === "step_to").forEach(a => { allX.push(a.args.x); allY.push(a.args.y); });
-const pad = 0.7, minX = Math.min(...allX) - pad, maxX = Math.max(...allX) + pad, minY = Math.min(...allY) - pad, maxY = Math.max(...allY) + pad;
-const S = 90, W = (maxX - minX) * S, H = (maxY - minY) * S;
+const stopNotes = D.notes.filter(n => n.note === "stop start").sort((a, b) => a.t - b.t);
+const moveNotes = D.notes.filter(n => n.note === "transition start");
+const stopsList = stopNotes.length
+  ? stopNotes.map((n, i) => ({ stop: n.stop, t0: n.t, t1: i + 1 < stopNotes.length ? stopNotes[i + 1].t : T_END }))
+  : [{ stop: D.meta.stop, t0: 0, t1: T_END }];
+function stopIdAt(t) {
+  let s = stopsList[0].stop, best = -1;
+  for (const w of stopsList) if (w.t0 <= t && w.t0 > best) { s = w.stop; best = w.t0; }
+  for (const m of moveNotes) if (m.t <= t && m.t > best) { s = m.to; best = m.t; }
+  return s;
+}
+const S = 90, ASPECT = 1.3, pad = 0.7;
+// one camera per stop (its exhibit, the group, the robot) and one per move between stops
+const camWins = [];
+stopsList.forEach(w => {
+  const mv = moveNotes.find(m => m.t >= w.t0 && m.t < w.t1);
+  camWins.push({ t0: w.t0, t1: mv ? mv.t : w.t1, ex: [w.stop] });
+  if (mv) camWins.push({ t0: mv.t, t1: w.t1, ex: [w.stop, mv.to] });
+});
+const views = camWins.map(w => {
+  const X = [], Y = [];
+  w.ex.forEach(id => { const e = ex[id]; X.push(e.x - e.radius, e.x + e.radius); Y.push(e.y - e.radius, e.y + e.radius); });
+  tracks.filter(r => r.t >= w.t0 && r.t < w.t1).forEach(r => { r.visitors.forEach(v => { X.push(v.x); Y.push(v.y); }); X.push(r.robot.x); Y.push(r.robot.y); });
+  actions.filter(a => a.kind === "step_to" && a.t >= w.t0 && a.t < w.t1).forEach(a => { X.push(a.args.x); Y.push(a.args.y); });
+  let x0 = Math.min(...X) - pad, x1 = Math.max(...X) + pad, y0 = Math.min(...Y) - pad, y1 = Math.max(...Y) + pad;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  let w_ = x1 - x0, h_ = y1 - y0;
+  if (w_ / h_ < ASPECT) w_ = h_ * ASPECT; else h_ = w_ / ASPECT;
+  return { minX: cx - w_ / 2, maxX: cx + w_ / 2, minY: cy - h_ / 2, maxY: cy + h_ / 2 };
+});
+let minX, maxX, minY, maxY, W, H;
 const px = x => ((x - minX) * S).toFixed(1), py = y => ((maxY - y) * S).toFixed(1);
 const map = document.getElementById("map");
-map.setAttribute("viewBox", `0 0 ${W.toFixed(0)} ${H.toFixed(0)}`);
+function setView(t) {
+  let i = 0;
+  camWins.forEach((w, j) => { if (w.t0 <= t) i = j; });
+  ({ minX, maxX, minY, maxY } = views[i]);
+  W = (maxX - minX) * S; H = (maxY - minY) * S;
+  map.setAttribute("viewBox", `0 0 ${W.toFixed(0)} ${H.toFixed(0)}`);
+}
 
 function targetXY(target, vis) {
   if (!target) return null;
@@ -167,6 +198,8 @@ function targetXY(target, vis) {
 }
 
 function drawMap(t) {
+  setView(t);
+  const stop = ex[stopIdAt(t)];
   const fr = trackAt(t), vis = fr.visitors, rob = robotAt(t), act = activeEvents(t);
   const has = (id, k) => act.some(e => e.track_id === id && e.kind === k);
   let s = `<rect width="100%" height="100%" fill="${MAP_BG}"/>`;
@@ -253,12 +286,15 @@ function drawMeasures() {
     ["Dominance share (D8)", `${f(m.dominance_share.top_visitor)} ${f(m.dominance_share.share)}`],
     ["Unresolved at stop end (P13)", `${f(m.p13_unresolved.share)}`],
   ];
+  if (m.falling_behind) rows.push(["Fell behind on a move", `${m.falling_behind.episodes} ${m.falling_behind.who.join(", ")}`]);
+  if ((m.steering_uptake.per_stop || []).length > 1)
+    m.steering_uptake.per_stop.forEach((p, i) => rows.push([`  uptake at stop ${i + 1} (${ex[p.stop].name})`, `${p.acted_on}/${p.detected}`]));
   document.getElementById("measures").innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join("");
 }
 
 // ------------------------------------------------------------------ timeline
 const tl = document.getElementById("timeline"), tip = document.getElementById("tip");
-const LANE = 22, LEFT = 64, TOP = 18;
+const LANE = 22, LEFT = 64, TOP = 30;
 let tlW = 0;
 const tx = t => LEFT + (t / T_END) * (tlW - LEFT - 12);
 function drawTimeline() {
@@ -268,7 +304,12 @@ function drawTimeline() {
   const H = TOP + lanes.length * LANE + 18;
   tl.setAttribute("width", tlW); tl.setAttribute("height", H);
   let s = "";
-  for (let t = 0; t <= T_END; t += 10) s += `<line x1="${tx(t)}" y1="${TOP - 4}" x2="${tx(t)}" y2="${H - 16}" stroke="var(--line)"/><text x="${tx(t)}" y="${H - 4}" text-anchor="middle" font-size="10" fill="var(--muted)">${t}</text>`;
+  for (let t = 0; t <= T_END; t += (T_END > 200 ? 20 : 10)) s += `<line x1="${tx(t)}" y1="${TOP - 4}" x2="${tx(t)}" y2="${H - 16}" stroke="var(--line)"/><text x="${tx(t)}" y="${H - 4}" text-anchor="middle" font-size="10" fill="var(--muted)">${t}</text>`;
+  stopsList.forEach((w, i) => {
+    s += `<rect x="${tx(w.t0)}" y="2" width="${Math.max(1, tx(w.t1) - tx(w.t0) - 2)}" height="16" rx="3" fill="var(--chip)"/>`;
+    s += `<text x="${tx(w.t0) + 5}" y="14" font-size="11" fill="var(--ink)">${i + 1}. ${esc(ex[w.stop].name)}</text>`;
+  });
+  for (const m of moveNotes) s += `<text x="${tx(m.t)}" y="14" font-size="11" fill="var(--muted)" text-anchor="end">→ </text>`;
   lanes.forEach((id, i) => s += `<text x="8" y="${TOP + i * LANE + 15}" font-size="12" font-weight="600" fill="${id === "robot" ? "var(--ink)" : colorOf(id)}">${id}</text>`);
   const y0 = TOP;
   for (const a of says) s += `<rect data-tip="${esc(a.t.toFixed(1) + " s · " + sayType(a) + ": " + a.args.text + " — " + a.reason)}" x="${tx(a.t)}" y="${y0 + 4}" width="${Math.max(2, tx(a.t + a.duration_s) - tx(a.t))}" height="${LANE - 8}" rx="3" fill="${SAY[sayType(a)]}"/>`;
@@ -340,7 +381,7 @@ document.getElementById("export").onclick = () => {
 addEventListener("resize", () => { drawTimeline(); render(); });
 
 document.getElementById("sub").textContent =
-  `${D.meta.scenario} · stop: ${stop.name} · ${T_END} s · ${visitorIds.length} visitors · tracks + events only (no video)`;
+  `${D.meta.scenario} · ${stopsList.map(w => ex[w.stop].name).join(" → ")} · ${T_END} s · ${visitorIds.length} visitors · tracks + events only (no video)`;
 document.getElementById("legend").innerHTML =
   Object.entries(KIND).map(([k, c]) => `<span><i style="background:${c}"></i>${k.replace("_", "/")}</span>`).join("") +
   Object.entries({ "core": SAY.core, "addition": SAY.add, "answer": SAY.qa }).map(([k, c]) => `<span><i style="background:${c}"></i>robot: ${k}</span>`).join("") +
