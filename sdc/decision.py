@@ -488,12 +488,6 @@ class StopController:
 
 # ---------------------------------------------------------------- between stops (§6)
 
-def would_exclude(option, gallery, profile):
-    """D1 filter: visitors an option would leave excluded. The gallery has no data for this yet
-    (see HANDOFF Q9), so no option is ruled out."""
-    return []
-
-
 def _serves_exhibit(layer, eid):
     if layer.kind == "feature_interest":
         return layer.target.startswith(eid + ".")
@@ -501,8 +495,10 @@ def _serves_exhibit(layer, eid):
 
 
 def plan_next_stop(stop, gallery, profile, visited, summary):
-    """Pace, depth and next stop. Next stop: drop options that exclude anyone, then the best weighted
-    score over confirmed layers (D1, same weights as §5). Returns a dict with reasons."""
+    """Pace, depth and next stop. Next stop: the route option with the best weighted score over
+    confirmed layers (same weights as §5). There is no per-option exclusion filter (Joey, 2026-11-12:
+    not core to the concept); D1's floor is kept within stops by the exclusion handler (P13).
+    Returns a dict with reasons."""
     reasons = []
     n = max(1, len(profile.visitors))
     share_tired = len(summary["fatigued"]) / n
@@ -527,22 +523,14 @@ def plan_next_stop(stop, gallery, profile, visited, summary):
     if not options:
         return {"next": None, "pace": pace, "depth": depth, "scores": {}, "offer_choice": False,
                 "reasons": reasons + ["no further stops on the route: tour close"]}
-    allowed = []
-    for o in options:
-        ex = would_exclude(o, gallery, profile)
-        if ex:
-            reasons.append(f"{o} ruled out: would exclude {', '.join(ex)} (D1)")
-        else:
-            allowed.append(o)
-    allowed = allowed or options
     scores = {}
-    for o in allowed:
+    for o in options:
         s = 0.0
         for tid, v in profile.visitors.items():
             si = min(1.0, sum(1.0 for l in v.layers.values() if l.status == "confirmed" and _serves_exhibit(l, o)))
             s += profile.weight(tid) * si
         scores[o] = round(s, 3)
-    ranked = sorted(allowed, key=lambda o: (-scores[o], options.index(o)))
+    ranked = sorted(options, key=lambda o: (-scores[o], options.index(o)))
     nxt = ranked[0]
     close = len(ranked) > 1 and scores[ranked[0]] - scores[ranked[1]] <= C.NEXT_STOP_CLOSE
     if close:
