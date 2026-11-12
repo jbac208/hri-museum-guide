@@ -136,17 +136,44 @@ class SignalLayer:
         self.tick = C.SIGNAL_TICK_S
         self.next_tick = None
         self.t_last = 0.0
+        self.mode = "stop"
+        self.robot_xy = None
         self.set_stop(stop, stop_index)
 
     # ------------------------------------------------------------ public API
-    def set_stop(self, stop, stop_index):
-        """The decision layer tells the signal layer which exhibit is the current stop."""
+    def set_stop(self, stop, stop_index, t=None):
+        """The decision layer tells the signal layer which exhibit is the current stop. Events still
+        active from the previous stop or transition end at t. Returns those ended events."""
+        out = self._close_all(t) if t is not None else []
+        self.mode = "stop"
         self.stop, self.stop_index = stop, stop_index
+        self._reset_hysteresis()
         w = seed_weight(stop_index)
         for st in self.v.values():
             for b in [*st.dist.values(), st.glance_rate, st.other_frac, st.posture_frac, st.away_frac]:
                 if b is not None and b.prior is not None:
                     b.prior_weight = w
+        return out
+
+    def set_transition(self, t, next_stop):
+        """Moving between stops: only falling behind is judged; baselines don't update."""
+        out = self._close_all(t)
+        self.mode, self.stop = "transition", next_stop
+        self._reset_hysteresis()
+        return out
+
+    def _close_all(self, t):
+        out = []
+        for st in self.v.values():
+            for ev in st.active.values():
+                ev.t1 = t
+                out.append(ev)
+            st.active.clear()
+        return out
+
+    def _reset_hysteresis(self):
+        for st in self.v.values():
+            st.hyst = self._new_hyst()
 
     def step(self, rec):
         """Feed one adapter record. Returns the events that started or ended because of it."""
@@ -196,7 +223,13 @@ class SignalLayer:
         st.other_frac = Baseline(C.STATE_PRIOR_FRAC, w)
         st.posture_frac = Baseline(C.STATE_PRIOR_FRAC, w)
         st.away_frac = Baseline(C.STATE_PRIOR_FRAC, w)
-        st.hyst = {
+        st.hyst = self._new_hyst()
+        return st
+
+    @staticmethod
+    def _new_hyst():
+        return {
+            "behind": Hysteresis(C.BEHIND_ON_S, C.BEHIND_OFF_S),
             "linger": Hysteresis(0.0, C.LINGER_OFF_S),
             "approach": Hysteresis(C.APPROACH_ON_S, C.APPROACH_OFF_S),
             "drift": Hysteresis(C.DRIFT_ON_S, C.DRIFT_OFF_S),
@@ -205,7 +238,6 @@ class SignalLayer:
             "barrier:position": Hysteresis(C.BARRIER_ON_S, C.BARRIER_OFF_S),
             "barrier:talked_over": Hysteresis(0.0, C.TALKED_OVER_OFF_S),
         }
-        return st
 
     # ------------------------------------------------------------ helpers
     def _is_stop_target(self, att):
@@ -240,6 +272,7 @@ class SignalLayer:
     # ------------------------------------------------------------ frame rate: attention runs, pointing, overlap
     def _on_frame(self, f):
         out = []
+        self.robot_xy = (f.robot.x, f.robot.y)
         for tid, o in f.visitors.items():
             st = self.v.get(tid)
             if st is None or o.track_conf < C.MIN_TRACK_CONF:
@@ -276,7 +309,7 @@ class SignalLayer:
     def _close_run(self, st, att, t0, t1):
         if att == "robot":
             st.glances.append((t0, t1))
-        elif self._is_stop_target(att) and "linger" not in st.active:
+        elif self.mode == "stop" and self._is_stop_target(att) and "linger" not in st.active:
             st.dwell.add(t1 - t0)
 
     # ------------------------------------------------------------ utterances
@@ -311,10 +344,41 @@ class SignalLayer:
     # ------------------------------------------------------------ tick rules
     def _run_tick(self, t):
         out = []
+        if self.mode == "transition":
+            out += self._tick_transition(t)
         for st in self.v.values():
-            if st.frames:
+            if st.frames and self.mode == "stop":
                 out += self._tick_visitor(st, t)
             st.frames = []
+        return out
+
+    def _tick_transition(self, t):
+        """Falling behind (§4): far from the robot and well behind the rest of the group."""
+        if self.robot_xy is None:
+            return []
+        rx, ry = self.robot_xy
+        d = {}
+        for tid, st in self.v.items():
+            if st.frames:
+                o = st.frames[-1]
+                d[tid] = math.hypot(o.x - rx, o.y - ry)
+        if not d:
+            return []
+        ds = sorted(d.values())
+        med = ds[len(ds) // 2]
+        out = []
+        for tid, dist in d.items():
+            st = self.v[tid]
+            cond = dist >= C.BEHIND_MIN_M and dist >= med + C.BEHIND_MARGIN_M
+            h = st.hyst["behind"]
+            r = h.update(t, cond, self.tick)
+            if r == "start":
+                out.append(self._start(st, "barrier:behind", "barrier", t, h.since,
+                                       f"barrier: falling behind ({dist:.1f} m from the robot, group median {med:.1f} m; "
+                                       f"≥ BEHIND_MIN_M={C.BEHIND_MIN_M} and median + BEHIND_MARGIN_M={C.BEHIND_MARGIN_M})",
+                                       detail="behind"))
+            elif r == "end":
+                out.append(self._end(st, "barrier:behind", h.last_true))
         return out
 
     def _tick_visitor(self, st, t):
