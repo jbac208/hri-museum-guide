@@ -164,6 +164,30 @@ def test_planner_ignores_pending_guesses():
     assert p["scores"] == {"ship_model": 0.0, "compass": 0.0} and p["offer_choice"]
 
 
+def test_depth_raised_puts_one_depth_piece_in_the_core():
+    """Q15: with depth raised, one depth addition joins the core; it doesn't use a P11 slot."""
+    scn = scenarios.s1_one_stop()
+    loop = Loop(GALLERY, scn.stop, scn.duration_s, contents=CONTENTS)
+    loop.ctrl.depth = "raised"
+    out = loop.run(adapter.from_lines(mock.generate(scn, GALLERY)))
+    deep = [a for a in loop.ctrl.actions if a.args.get("core_depth")]
+    assert len(deep) == 1 and CONTENTS["figurehead"].addition(deep[0].args["id"]).type == "depth"
+    core_ends = max(a.t for a in loop.ctrl.actions if str(a.args.get("id", "")).startswith("figurehead.core."))
+    assert deep[0].t > core_ends and "depth raised" in deep[0].reason
+    assert deep[0].args["id"] not in out["summary"]["additions"] and out["summary"]["core_depth"] == [deep[0].args["id"]]
+    assert len(out["summary"]["additions"]) <= C.MAX_ADDITIONS_PER_STOP
+
+
+def test_planner_raises_depth_when_most_want_it():
+    ps = ProfileStore(SI)
+    for tid in ("v1", "v2", "v3", "v4"):              # 4 of 6 confirmed 'wants more depth'
+        ps.on_event(_ev("approach", tid, "figurehead"), "figurehead")
+        (l,) = ps.layers(tid, kind="depth")
+        ps.confirm(l.id, 2.0, "test uptake")
+    p = plan_next_stop("figurehead", GALLERY, ps, ["figurehead"], {"fatigued": [], "exclusion_unresolved": []})
+    assert p["depth"] == "raised"
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in list(globals().items()):

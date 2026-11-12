@@ -112,7 +112,7 @@ const clusterOf = Object.fromEntries(tracks[0].visitors.map(v => [v.id, v.cluste
 const colorOf = id => CLUSTER[clusters.indexOf(clusterOf[id]) % CLUSTER.length];
 const actions = D.actions.slice().sort((a, b) => a.t - b.t);
 const says = actions.filter(a => a.kind === "say_to_group");
-const sayType = a => { const id = String(a.args.id || "");
+const sayType = a => { const id = String(a.args.id || ""); if (a.args.core_depth) return "core";
   return id.includes(".core.") ? "core" : id.includes(".add.") ? "add" : id.includes(".qa.") ? "qa" : id.endsWith(".open") ? "open" : "other"; };
 
 function trackAt(t) {

@@ -401,8 +401,10 @@ class StopController:
                 deep = next((a for a in self.ex.additions if a.type == "depth" and a.id not in self.used), None)
                 if deep and self._fits(t, deep.duration_s):
                     self.used.add(deep.id)
-                    self._say(t, deep.text, "core: default depth raised for this stop (§6.3), same for everyone",
-                              [(0.5, deep.look, "depth: look at its target")], deep.id)
+                    say = self._say(t, deep.text, "core: default depth raised for this stop (§6.3), same for everyone",
+                                    [(0.5, deep.look, "depth: look at its target")], deep.id)
+                    say.args["core_depth"] = True
+                    self._sync_log(say)
                     self.busy_until += C.SEGMENT_GAP_S
                     return
             if self.core_i < len(self.core):
@@ -517,7 +519,8 @@ class StopController:
         self.summary = {
             "stop": self.stop, "t_end": round(t, 2),
             "additions": [a.args["id"] for a in self.actions if a.kind == "say_to_group" and not a.args.get("resume")
-                          and str(a.args.get("id", "")).startswith(f"{self.stop}.add.")],
+                          and not a.args.get("core_depth") and str(a.args.get("id", "")).startswith(f"{self.stop}.add.")],
+            "core_depth": [a.args["id"] for a in self.actions if a.args.get("core_depth")],
             "exclusion_resolved": self.resolved,
             "exclusion_unresolved": sorted(self.episodes),
             "fatigued": sorted(self.fatigued),
