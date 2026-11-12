@@ -70,10 +70,12 @@ class EventLog:
         for ev in loop.signals.events:
             recs.append({"type": "event", "t": ev.t_detect, **ev.as_dict(), "layer": self.event_layer.get(id(ev))})
         recs += [{"type": "profile", **e} for e in loop.profile.log]
-        recs += [dict(e) for e in loop.ctrl.log]
-        if loop.plan:
-            recs.append({"type": "note", "t": loop.t, "note": "plan", **loop.plan})
+        recs += [dict(e) for e in loop.decision_log()]
+        for plan in loop.plans:
+            recs.append({"type": "note", "note": "plan", **plan, "t": plan.get("t", loop.t)})
         recs = [_redact(r) for r in recs]
+        if recs[0].get("duration_s") is None:
+            recs[0] = dict(recs[0], duration_s=round(max(r["t"] for r in recs), 1))
         recs.sort(key=lambda r: (r["t"], r["type"] != "meta"))
         recs.append({"type": "measures", "t": recs[-1]["t"], **measures(recs)})
         return recs
@@ -105,6 +107,16 @@ def measures(records):
                     break
         if by:
             acted.append({"track_id": e["track_id"], "kind": e["kind"], "t": e["t_detect"], "by": by})
+    stops = sorted((n["t"], n["stop"]) for n in notes if n["note"] == "stop start")
+    stop_of = lambda t: next((s for t0, s in reversed(stops) if t0 <= t + 1e-9), stops[0][1] if stops else None)
+    acted_keys = {(a["track_id"], a["kind"], a["t"]) for a in acted}
+    per_stop = []
+    for _, sid in stops:
+        evs = [e for e in steering if stop_of(e["t_detect"]) == sid]
+        n_act = sum(1 for e in evs if (e["track_id"], e["kind"], e["t_detect"]) in acted_keys)
+        per_stop.append({"stop": sid, "detected": len(evs), "acted_on": n_act,
+                         "share": round(n_act / len(evs), 3) if evs else None})
+    behind = [n for n in notes if n["note"] == "falling behind"]
     per_visitor = {}
     for a in acted:
         per_visitor[a["track_id"]] = per_visitor.get(a["track_id"], 0) + 1
@@ -125,7 +137,8 @@ def measures(records):
     return {
         "steering_uptake": {"detected": len(steering), "acted_on": len(acted),
                             "share": round(len(acted) / len(steering), 3) if steering else None,
-                            "acted": acted},
+                            "acted": acted, "per_stop": per_stop},
+        "falling_behind": {"episodes": len(behind), "who": sorted({n["track_id"] for n in behind})},
         "exclusion": {"episodes": len(starts), "resolved": len(resolved), "unresolved": len(unresolved),
                       "time_to_resolve_s": ttr,
                       "mean_time_to_resolve_s": round(sum(ttr) / len(ttr), 2) if ttr else None},

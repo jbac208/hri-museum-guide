@@ -124,3 +124,16 @@ NEXT_STOP_CLOSE = 0.1           # P12: offer a two-way choice if the top two nex
 # ---------------------------------------------------------------- logging (block 8)
 LOG_TRACK_HZ = 5                # tracks are logged at this rate (no video, ever)
 STEERING_KINDS = ("linger", "approach", "drift", "point_ask")   # signals counted by steering uptake (D3)
+
+# ---------------------------------------------------------------- transitions between stops (§4, §6)
+BEHIND_MIN_M = 3.5              # falling behind: at least this far from the robot ...
+BEHIND_MARGIN_M = 2.0           # ... and this much farther than the group's median distance to it
+BEHIND_ON_S = 2.0
+BEHIND_OFF_S = 2.0
+ROBOT_STOP_OFFSET = (-2.2, -0.3)  # where the robot stands relative to an exhibit's centre
+ROBOT_WALK_MPS = 0.7            # walking speed between stops
+ROBOT_WALK_SLOW_MPS = 0.4       # after slow_down(): pace slower, or someone fell behind
+ARRIVE_RADIUS_M = 3.5           # a visitor has arrived when this close to the next exhibit
+WAIT_MAX_S = 45.0               # wait at most this long for everyone before starting the stop
+CHOICE_WAIT_S = 6.0             # P12: after offering two options, read orientation/gaze for this long
+CHOICE_FACING_RAD = 0.6         # facing an option = body within this angle of the bearing to it

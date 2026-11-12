@@ -64,3 +64,14 @@ class Loop:
     def records(self):
         """The event log (tracks + events, no video) with the live measures as its last record."""
         return self.log.records(self)
+
+    @property
+    def actions(self):
+        return self.ctrl.actions
+
+    def decision_log(self):
+        return self.ctrl.log
+
+    @property
+    def plans(self):
+        return [self.plan] if self.plan else []

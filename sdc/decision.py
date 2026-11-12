@@ -156,7 +156,7 @@ class UptakeWindow:
 
 class StopController:
     def __init__(self, stop, exhibit, gallery, profile, t_start, duration_s, used_additions=None,
-                 robot_pose=None):
+                 robot_pose=None, stop_index=0, depth="same"):
         self.stop, self.ex, self.gallery, self.profile = stop, exhibit, gallery, profile
         e = next(x for x in gallery["exhibits"] if x["id"] == stop)
         self.stop_xy = (e["x"], e["y"])
@@ -180,6 +180,9 @@ class StopController:
         self.steering_signals, self.fatigued = [], set()
         self.done = False
         self.dwell_of = None   # tid -> own mean dwell (s), set by the loop from the signal layer
+        self.stop_index, self.depth = stop_index, depth
+        self.core = list(exhibit.core)
+        self._note(t_start, "stop start", stop=stop, stop_index=stop_index, duration_s=duration_s, depth=depth)
 
     # ------------------------------------------------------------ output
     def _act(self, t, kind, args, reason, duration_s=0.0):
@@ -270,7 +273,9 @@ class StopController:
 
     def _exclusion_followups(self, t):
         for tid, ep in self.episodes.items():
-            if (ep["turned_t"] is not None and "step" not in ep["fixed"]
+            o = self.frame.visitors.get(tid) if self.frame else None
+            looks_clear = o is not None and o.in_formation and o.los_exhibit   # barrier may be clearing right now
+            if (ep["turned_t"] is not None and "step" not in ep["fixed"] and not looks_clear
                     and t - ep["turned_t"] >= C.EXCLUSION_RECHECK_S
                     and self.repositions < C.MAX_REPOSITIONS_PER_STOP and self.pose):
                 ep["fixed"].add("step")
@@ -352,12 +357,21 @@ class StopController:
                 return
             self.phase = "core"
         if self.phase == "core":
-            if self.core_i < len(self.ex.core):
-                seg = self.ex.core[self.core_i]
+            if self.core_i == len(self.core) and self.depth == "raised" and not getattr(self, "_deep_done", False):
+                self._deep_done = True
+                deep = next((a for a in self.ex.additions if a.type == "depth" and a.id not in self.used), None)
+                if deep and self._fits(t, deep.duration_s):
+                    self.used.add(deep.id)
+                    self._say(t, deep.text, "core: default depth raised for this stop (§6.3), same for everyone",
+                              [(0.5, deep.look, "depth: look at its target")], deep.id)
+                    self.busy_until += C.SEGMENT_GAP_S
+                    return
+            if self.core_i < len(self.core):
+                seg = self.core[self.core_i]
                 self.core_i += 1
                 if self._fits(t, seg.duration_s):
                     looks = [(dt, c["look"], f"cue word '{c['word']}' (Yamazaki 2009)") for dt, c in seg.cue_times()]
-                    self._say(t, seg.text, f"core {self.core_i}/{len(self.ex.core)}: same for everyone", looks, seg.id)
+                    self._say(t, seg.text, f"core {self.core_i}/{len(self.core)}: same for everyone", looks, seg.id)
                     self.busy_until += C.SEGMENT_GAP_S
                 return
             self.phase = "open"
@@ -492,12 +506,15 @@ def plan_next_stop(stop, gallery, profile, visited, summary):
     reasons = []
     n = max(1, len(profile.visitors))
     share_tired = len(summary["fatigued"]) / n
-    behind = bool(summary["exclusion_unresolved"])
+    behind = bool(summary["exclusion_unresolved"]) or bool(summary.get("fell_behind"))
     if share_tired >= C.PACE_FATIGUE_SHARE or behind:
         pace = "slower"
-        reasons.append(f"pace slower: {share_tired:.0%} of the group showed fatigue "
-                       f"(≥ PACE_FATIGUE_SHARE={C.PACE_FATIGUE_SHARE})" if share_tired >= C.PACE_FATIGUE_SHARE
-                       else "pace slower: someone is still excluded or behind")
+        if share_tired >= C.PACE_FATIGUE_SHARE:
+            reasons.append(f"pace slower: {share_tired:.0%} of the group showed fatigue (≥ PACE_FATIGUE_SHARE={C.PACE_FATIGUE_SHARE})")
+        elif summary.get("fell_behind"):
+            reasons.append("pace slower: someone fell behind on the last move (floor, §6.2)")
+        else:
+            reasons.append("pace slower: someone is still excluded at stop end (floor, §6.2)")
     else:
         pace = "same"
         reasons.append(f"pace same: {share_tired:.0%} showed fatigue (< PACE_FATIGUE_SHARE)")
@@ -528,7 +545,10 @@ def plan_next_stop(stop, gallery, profile, visited, summary):
     ranked = sorted(allowed, key=lambda o: (-scores[o], options.index(o)))
     nxt = ranked[0]
     close = len(ranked) > 1 and scores[ranked[0]] - scores[ranked[1]] <= C.NEXT_STOP_CLOSE
-    reasons.append(f"next {nxt}: weighted confirmed-interest scores {scores}"
-                   + (" (top two within NEXT_STOP_CLOSE: offer a two-way choice, P12)" if close else ""))
+    if close:
+        reasons.append(f"weighted confirmed-interest scores {scores}: top two within NEXT_STOP_CLOSE="
+                       f"{C.NEXT_STOP_CLOSE}, so offer a two-way choice between {ranked[0]} and {ranked[1]} (P12)")
+    else:
+        reasons.append(f"next {nxt}: best weighted confirmed-interest score {scores} (D1, D8)")
     return {"next": nxt, "pace": pace, "depth": depth, "scores": scores, "offer_choice": close,
             "choice": ranked[:2] if close else None, "reasons": reasons}
