@@ -104,6 +104,20 @@ def test_measures_per_stop():
     assert M["falling_behind"]["who"] == ["v6"]
 
 
+def test_started_without_everyone_counts_as_floor_miss():
+    """Q17: after WAIT_MAX_S the stop starts anyway; that shows up in the measures."""
+    assert M["falling_behind"]["stops_started_without_everyone"] == 0
+    old = C.WAIT_MAX_S
+    try:
+        C.WAIT_MAX_S = 1.0
+        t, *_ = run()
+    finally:
+        C.WAIT_MAX_S = old
+    fb = t.records()[-1]["falling_behind"]
+    assert fb["stops_started_without_everyone"] >= 1 and "v6" in fb["missing"]
+    assert len(t.visited) == 3                          # the tour carries on
+
+
 def test_privacy_end_tour():
     t, *_ = run()
     kept = t.end_tour()

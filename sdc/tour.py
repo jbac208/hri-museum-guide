@@ -246,7 +246,8 @@ class Tour:
             self._act(m["arrive_t"], "pause", {"s": round(waited, 1)},
                       "waited at the next stop until everyone arrived before starting (§4)", round(waited, 1))
         if far:
-            self._note(f.t, "started without everyone (WAIT_MAX_S)", missing=far)
+            self._note(f.t, "started without everyone (WAIT_MAX_S)", missing=far, stop=m["next"],
+                       why=f"waited WAIT_MAX_S={C.WAIT_MAX_S}s; late arrivals are left to the exclusion handler (Q17)")
         self.k += 1
         nxt = m["next"]
         self.visited.append(nxt)

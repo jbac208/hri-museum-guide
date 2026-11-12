@@ -14,6 +14,8 @@ The four live measures (Perception & decision loop §7) + the P13 headline, all 
                    (linger, approach, drift, point_ask) is acted on if it was a question that got
                    answered, or its profile layer was addressed by an addition delivered after it.
   exclusion        episodes, how many resolved, time to resolve (D2, D10)
+  falling_behind   moves where someone fell behind, and stops started without everyone after
+                   WAIT_MAX_S (a floor miss, Q17); not counted as exclusion episodes (Q14)
   misread_rate     layers rescinded / layers tested by an addition (D6)
   dominance_share  share of acted-on signals that came from the single most-acted-on visitor (D8)
   p13_unresolved   share of visitors with >= 1 exclusion episode unresolved at stop end (should be 0)
@@ -120,6 +122,7 @@ def measures(records):
         per_stop.append({"stop": sid, "detected": len(evs), "acted_on": n_act,
                          "share": round(n_act / len(evs), 3) if evs else None})
     behind = [n for n in notes if n["note"] == "falling behind"]
+    started_without = [n for n in notes if n["note"].startswith("started without everyone")]
     per_visitor = {}
     for a in acted:
         per_visitor[a["track_id"]] = per_visitor.get(a["track_id"], 0) + 1
@@ -141,7 +144,10 @@ def measures(records):
         "steering_uptake": {"detected": len(steering), "acted_on": len(acted),
                             "share": round(len(acted) / len(steering), 3) if steering else None,
                             "acted": acted, "per_stop": per_stop},
-        "falling_behind": {"episodes": len(behind), "who": sorted({n["track_id"] for n in behind})},
+        "falling_behind": {"episodes": len(behind), "who": sorted({n["track_id"] for n in behind}),
+                           # floor miss (Q17): a stop started after WAIT_MAX_S with someone still missing
+                           "stops_started_without_everyone": len(started_without),
+                           "missing": sorted({tid for n in started_without for tid in n["missing"]})},
         "exclusion": {"episodes": len(starts), "resolved": len(resolved), "unresolved": len(unresolved),
                       "time_to_resolve_s": ttr,
                       "mean_time_to_resolve_s": round(sum(ttr) / len(ttr), 2) if ttr else None},

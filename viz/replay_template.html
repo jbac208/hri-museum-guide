@@ -286,7 +286,10 @@ function drawMeasures() {
     ["Dominance share (D8)", `${f(m.dominance_share.top_visitor)} ${f(m.dominance_share.share)}`],
     ["Unresolved at stop end (P13)", `${f(m.p13_unresolved.share)}`],
   ];
-  if (m.falling_behind) rows.push(["Fell behind on a move", `${m.falling_behind.episodes} ${m.falling_behind.who.join(", ")}`]);
+  if (m.falling_behind) {
+    rows.push(["Fell behind on a move", `${m.falling_behind.episodes} ${m.falling_behind.who.join(", ")}`]);
+    rows.push(["Started without everyone (floor miss)", `${m.falling_behind.stops_started_without_everyone || 0} ${(m.falling_behind.missing || []).join(", ")}`]);
+  }
   if ((m.steering_uptake.per_stop || []).length > 1)
     m.steering_uptake.per_stop.forEach((p, i) => rows.push([`  uptake at stop ${i + 1} (${ex[p.stop].name})`, `${p.acted_on}/${p.detected}`]));
   document.getElementById("measures").innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join("");
