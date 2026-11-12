@@ -116,7 +116,7 @@ def test_uptake_confirms_or_rescinds():
         ps = ProfileStore(SI)
         ps.on_event(Event("linger", "v4", 0, 0, target="figurehead.paint", reason="test"), "figurehead")
         _, per = score_addition(a, ps)
-        w = UptakeWindow(a, 0.0, 12.0, per, GALLERY, _frame(0.0, att))
+        w = UptakeWindow(a, 0.0, 12.0, per, GALLERY, _frame(0.0, att), "figurehead")
         for i in range(121):
             w.on_frame(_frame(i / 10, att))
         ctrl = StopController("figurehead", CONTENTS["figurehead"], GALLERY, ps, 0.0, 60.0)
@@ -131,7 +131,7 @@ def test_uptake_by_question():
     ps = ProfileStore(SI)
     ps.on_event(Event("linger", "v4", 0, 0, target="figurehead.paint", reason="test"), "figurehead")
     _, per = score_addition(a, ps)
-    w = UptakeWindow(a, 0.0, 12.0, per, GALLERY, _frame(0.0, "none"))
+    w = UptakeWindow(a, 0.0, 12.0, per, GALLERY, _frame(0.0, "none"), "figurehead")
     w.on_utterance(Utterance(5.0, "v4", "Why red?", True, 1.0))
     assert "asked" in w.evidence("v4")
 
