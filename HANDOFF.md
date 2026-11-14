@@ -54,6 +54,7 @@ Folder: `/Users/joeyback/Library/Mobile Documents/iCloud~md~obsidian/Documents/O
 - The Implementation doc's walkthrough raises steering credit on confirmation; it now rises when the robot acts on a signal (Q10).
 - D10 lists "falling behind" among barriers for the excluded test; falling behind is handled as a floor rule without a bid (Q14).
 - P12 (two-way choice) is still marked *proposed*; Joey agreed to keep it (Q16). P11 and P13 are implemented as proposed.
+- D7's example phrasing ("A few of you seem curious about this…") isn't what the robot says; additions open neutrally so a lone lingerer isn't pointed at (Q8).
 
 ## 4. Design rules → what the code does
 
