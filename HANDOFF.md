@@ -21,7 +21,7 @@
 | 8 Replay visualiser | Done (single and multi-stop) |
 | 9 Baseline comparison | Done (results in §7) |
 
-99 tests pass (`python3 run_tests.py`). Design questions Q1–Q5 and Q9–Q17 are answered by Joey; **Q6–Q8 are still provisional** (§8).
+99 tests pass (`python3 run_tests.py`). All design questions Q1–Q17 are answered by Joey (§8).
 
 ## 1. The project in one paragraph
 
@@ -181,6 +181,9 @@ Answered by Joey (each logged in the status log, §11, with details):
 | Q3 | A talked-over question is bid + barrier (fix first) **and** point/ask (then answer) |
 | Q4 | An exclusion episode ends only when the barrier clears |
 | Q5 | Moving closer from outside the formation = bid (edging in); from inside = approach |
+| Q6 | A rescinded guess isn't revived by more of the same behaviour that stop, but an explicit question re-confirms it |
+| Q7 | A question that names or points at nothing confirms interest in the current exhibit as a whole |
+| Q8 | Addition lead-ins stay neutral ("One more thing about the carving…"), never about what visitors did — stricter than D7's example, so a lone lingerer isn't pointed at |
 | Q9 | No next-stop exclusion filter (not core, too nuanced) |
 | Q10 | Steering credit rises when the robot acts on a signal, landed or not |
 | Q11 | Answer at the end of the current sentence; answers outside P11; late questions answered (stop overruns) |
@@ -190,11 +193,6 @@ Answered by Joey (each logged in the status log, §11, with details):
 | Q15 | Raised depth = one depth piece joins the next stop's core |
 | Q16 | Keep P12; read the group's turning weighted by w |
 | Q17 | Wait up to `WAIT_MAX_S`, then start; count it as a floor miss |
-
-**Still provisional — Joey hasn't answered these** (current defaults in code):
-- **Q6** A rescinded layer isn't reopened by the same evidence within the stop, but an explicit question re-confirms it (`POINT_ASK_REOPENS_RESCINDED=True`).
-- **Q7** A question that doesn't point at a feature confirms interest in the current exhibit as a whole.
-- **Q8** Addition lead-ins are neutral ("One more thing about the carving…") and never mention what visitors did — stricter than D7's example "A few of you seem curious…", which would single out a lone lingerer.
 
 **Still open (Joey/Jay):** who owns the tour close (no closing behaviour is built) · interface v0.1 sign-off (who computes `attention`/`los_*`/`in_formation`, whether `posture` is feasible, who owns ASR, start-impression contents P16).
 
@@ -240,3 +238,4 @@ Points to check with Joey before outlining: where the outline lives; how much sp
 - 2026-11-12: **Q17 answered (Joey): cap the wait and count it.** Wait up to `WAIT_MAX_S` (tunable, 45 s), then start; late arrivals go through the normal exclusion handler; `measures.falling_behind.stops_started_without_everyone` / `missing` record it as a floor miss (s2: 0). **Q9–Q17 answered** (Q6–Q8 still provisional, see §8). Remaining open: tour-close owner, interface v0.1 sign-off (Joey/Jay). Vault to update (Joey): §6.4/D1 (Q9), Implementation credit example (Q10), D10 falling-behind note (Q14), P12 agreed (Q16). **Next: task 9 (baseline comparison), then optional s3/s4.**
 - 2026-11-12: **Task 9 done.** `sdc/policies.py` (ours · one_size, Burgard 1999 · engagement, Lin 2024 — switches over the same decision layer), `compare_policies.py` → `results/policies.md` (gitignored), `tests/test_policies.py`. Results (simulated visitors, mean over 20 s1 / 10 s2 seeds): P13 unresolved 0 (ours) vs 0.17 (both baselines: the child stays excluded); steering uptake s1 0.72 / 0.62 / 0.69, s2 0.71 / 0.48 / 0.71; dominance share s1 0.57 / 0.80 / 0.62, s2 0.41 / 0.83 / 0.45; time to resolve 2.4 s vs never (position barrier); baselines start stops without the slow walker. Misread rate mixed (ours 0.39 vs engagement 0.17 in s1, 0.23 vs 0.43 in s2). Caveat for the paper: sim rules (e.g. the child only joins when invited) drive the exclusion result; this demonstrates mechanisms, not real-visitor effects. **Next (optional): s3_dominant, s4_misread; paper figures.**
 - 2026-11-14: **Handoff reorganised for the paper phase.** HANDOFF rewritten (status, rules → code, system summary, results, decisions, paper inputs); `run_tests.py` added; README/CLAUDE.md commands updated. Correction: Q6–Q8 were never answered (an earlier entry said all were). s3/s4 and figures deferred (Joey). **Next: outline the paper (§9).**
+- 2026-11-14: **Q6–Q8 answered (Joey): keep the current defaults.** Q6 an explicit question re-confirms a rescinded guess (`POINT_ASK_REOPENS_RESCINDED=True`) · Q7 an unpointed question confirms interest in the current exhibit · Q8 neutral addition lead-ins. No code change. **All design questions Q1–Q17 answered.** Vault note for Joey: D7's example phrasing ("A few of you seem curious…") isn't used (Q8).
