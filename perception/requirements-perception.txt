@@ -1,0 +1,8 @@
+# perception/ only. sdc/ stays standard-library only and never imports perception/.
+# Versions are the ones the tests ran with (facenet-pytorch 2.6.0 needs torch < 2.3 and numpy < 2).
+# Tests: python3 -m pytest perception/tests (pytest is not listed here).
+numpy==1.26.4
+opencv-python==4.13.0.92
+onnxruntime==1.23.2
+torch==2.2.2
+facenet-pytorch==2.6.0
