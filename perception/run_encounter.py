@@ -1,7 +1,7 @@
 """Run the initial encounter once and print (or write) its start_impression as one JSON line.
 
   python3 -m perception.run_encounter --source fake            # scripted, deterministic (used by the tests)
-  python3 -m perception.run_encounter --source webcam [--camera 0] [--max-s 120] [--out si.json]
+  python3 -m perception.run_encounter --source webcam [--camera 0] [--max-s 120] [--out si.json] [--show]
 
 Exit code 0 with an impression, 1 if no engagement event happened before the frames ran out.
 """
@@ -83,6 +83,32 @@ def webcam_frames(index: int, max_s: float):
         cap.release()
 
 
+def show_live(frames, enc):
+    """Wrap a (t, frame) source: after the encounter has processed each frame, draw what it sees in a window.
+    Display only, nothing is written; the window closes with the run. Press q in the window to stop."""
+    import cv2
+    try:
+        for t, frame in frames:
+            yield t, frame                       # the encounter steps on this frame before we resume below
+            view = frame.copy()
+            for pid, r in enc.latest.items():
+                x1, y1, x2, y2 = r["box"]
+                ok = pid in enc.stable
+                colour = (0, 200, 0) if ok else (0, 200, 255)
+                cv2.rectangle(view, (x1, y1), (x2, y2), colour, 2)
+                label = (f"{pid} {r['band']} {r['confidence']:.2f} ratio {(y2 - y1) / enc.frame_h:.2f} "
+                         f"{'stable' if ok else 'unstable'} {enc.engagement.state(pid)}")
+                cv2.putText(view, label, (x1, max(15, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colour, 1)
+            cv2.putText(view, f"t={t:.1f}s  enter ratio 0.20  q = stop", (10, view.shape[0] - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv2.imshow("perception (live view)", view)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                print(f"[{t:6.1f}s] stopped from the live view (q)", file=sys.stderr)
+                return
+    finally:
+        cv2.destroyAllWindows()
+
+
 def progress(every_s: float = 1.0):
     """on_frame callback: one status line per `every_s` to stderr (what the tracker, clusters and trigger see).
     ``on_frame.max_ratio`` keeps each visitor's highest face-box ratio over every frame (not only printed ones)."""
@@ -118,6 +144,7 @@ def main(argv=None) -> int:
     ap.add_argument("--max-s", type=float, default=120.0, help="webcam: give up after this many seconds")
     ap.add_argument("--stable-frames", type=int, default=None, help="consecutive frames before a visitor counts")
     ap.add_argument("--out", help="write the JSON here instead of printing it")
+    ap.add_argument("--show", action="store_true", help="webcam: live view window with boxes and states (q stops)")
     args = ap.parse_args(argv)
     kw = {} if args.stable_frames is None else {"stable_frames": args.stable_frames}
 
@@ -129,6 +156,8 @@ def main(argv=None) -> int:
         from .faces import load_detect_and_embed
         enc = Encounter(FairFaceAgeEstimator(), load_detect_and_embed(), **kw)
         frames, on_frame = webcam_frames(args.camera, args.max_s), progress()
+        if args.show:
+            frames = show_live(frames, enc)
 
     si = enc.run(frames, on_frame)
     if on_frame:
