@@ -84,10 +84,14 @@ def webcam_frames(index: int, max_s: float):
 
 
 def progress(every_s: float = 1.0):
-    """on_frame callback: one status line per `every_s` to stderr (what the tracker, clusters and trigger see)."""
+    """on_frame callback: one status line per `every_s` to stderr (what the tracker, clusters and trigger see).
+    ``on_frame.max_ratio`` keeps each visitor's highest face-box ratio over every frame (not only printed ones)."""
     last = [-1e9]
 
     def on_frame(t, enc, ev):
+        for pid, r in enc.latest.items():
+            on_frame.max_ratio[pid] = max(on_frame.max_ratio.get(pid, 0.0), (r["box"][3] - r["box"][1]) / enc.frame_h)
+        on_frame.frames += 1
         if ev is None and t - last[0] < every_s:
             return
         last[0] = t
@@ -99,10 +103,11 @@ def progress(every_s: float = 1.0):
                          f"ratio={ratio:.2f} {'stable' if pid in enc.stable else 'unstable'} "
                          f"group={ctx.group_id if ctx.status == 'known' else ctx.status + '/' + ctx.reason} "
                          f"engage={enc.engagement.state(pid)}")
-        print(f"[{t:6.1f}s] {len(enc.latest)} face(s) " + " | ".join(parts), file=sys.stderr)
+        print(f"[{t:6.1f}s] fired={'yes' if ev else 'no'} {len(enc.latest)} face(s) " + " | ".join(parts), file=sys.stderr)
         if ev is not None:
             print(f"[{t:6.1f}s] ENGAGE {ev.person_ids} reason={ev.reason} group={ev.group}", file=sys.stderr)
 
+    on_frame.max_ratio, on_frame.frames = {}, 0
     return on_frame
 
 
@@ -126,6 +131,9 @@ def main(argv=None) -> int:
         frames, on_frame = webcam_frames(args.camera, args.max_s), progress()
 
     si = enc.run(frames, on_frame)
+    if on_frame:
+        peaks = ", ".join(f"{p}={r:.3f}" for p, r in sorted(on_frame.max_ratio.items())) or "no face passed filter_faces"
+        print(f"{on_frame.frames} frames; max face-box ratio (enter_ratio 0.20): {peaks}", file=sys.stderr)
     if si is None:
         print("no engagement event; no start_impression", file=sys.stderr)
         return 1
