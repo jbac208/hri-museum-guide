@@ -129,11 +129,14 @@ def progress(every_s: float = 1.0):
                          f"ratio={ratio:.2f} {'stable' if pid in enc.stable else 'unstable'} "
                          f"group={ctx.group_id if ctx.status == 'known' else ctx.status + '/' + ctx.reason} "
                          f"engage={enc.engagement.state(pid)}")
-        print(f"[{t:6.1f}s] fired={'yes' if ev else 'no'} {len(enc.latest)} face(s) " + " | ".join(parts), file=sys.stderr)
+        raw = " ".join(f"{r:.2f}" for r in on_frame.raw)
+        print(f"[{t:6.1f}s] fired={'yes' if ev else 'no'} raw={len(on_frame.raw)}[{raw}] {len(enc.latest)} face(s) "
+              + " | ".join(parts), file=sys.stderr)
         if ev is not None:
             print(f"[{t:6.1f}s] ENGAGE {ev.person_ids} reason={ev.reason} group={ev.group}", file=sys.stderr)
 
     on_frame.max_ratio, on_frame.frames = {}, 0
+    on_frame.raw, on_frame.max_raw = [], 0.0       # set by the webcam detect wrapper (MTCNN boxes before filter_faces)
     return on_frame
 
 
@@ -154,8 +157,16 @@ def main(argv=None) -> int:
     else:
         from .age import FairFaceAgeEstimator
         from .faces import load_detect_and_embed
-        enc = Encounter(FairFaceAgeEstimator(), load_detect_and_embed(), **kw)
-        frames, on_frame = webcam_frames(args.camera, args.max_s), progress()
+        on_frame = progress()
+        detect_raw = load_detect_and_embed()
+
+        def detect(frame):                        # record MTCNN output BEFORE filter_faces, for the progress lines
+            ds = detect_raw(frame)
+            on_frame.raw = [(d.box[3] - d.box[1]) / frame.shape[0] for d in ds]
+            on_frame.max_raw = max([on_frame.max_raw, *on_frame.raw])
+            return ds
+        enc = Encounter(FairFaceAgeEstimator(), detect, **kw)
+        frames = webcam_frames(args.camera, args.max_s)
         if args.show:
             frames = show_live(frames, enc)
 
@@ -163,6 +174,7 @@ def main(argv=None) -> int:
     if on_frame:
         peaks = ", ".join(f"{p}={r:.3f}" for p, r in sorted(on_frame.max_ratio.items())) or "no face passed filter_faces"
         print(f"{on_frame.frames} frames; max face-box ratio (enter_ratio 0.20): {peaks}", file=sys.stderr)
+        print(f"max raw MTCNN face ratio before filter_faces (height floor 0.18): {on_frame.max_raw:.3f}", file=sys.stderr)
     if si is None:
         print("no engagement event; no start_impression", file=sys.stderr)
         return 1
