@@ -38,7 +38,7 @@ python3 -m perception.run_encounter --source webcam --camera 0     # MTCNN + Fac
 ## Tests
 
 ```
-python3 -m pytest perception/tests     # 93 tests; files needing numpy skip cleanly without it
+python3 -m pytest perception/tests     # 94 tests; files needing numpy skip cleanly without it
 python3 run_tests.py                   # Joey's 99 tests, unchanged; never sees perception/tests
 ```
 
@@ -479,6 +479,15 @@ No file under `sdc/`, `data/` or his root scripts is edited, and no threshold ch
   - **Why:** the event fires when the first visitor's group is known. Lone visitors are known after `stable_s` (1.5 s), but pairs need `together_s` (3 s), so the impression, which is a snapshot at the first event, never contains a pair.
   - **Effect:** his loop's measures didn't change, because a cluster only sets which way the robot faces for an addition. But it is a real limitation of taking the snapshot at the first event. Not changed.
 
+**Level 2: no change, as expected.** Run once with `python3 -m perception.integration.level2_check --seeds 20` (~30 s).
+- **What it does:** besides the start impression, every frame's `track_conf`, `age_class`, `age_conf` and `cluster_id` for each visitor are taken from our encounter. Geometry stays on Joey's mock.
+- **Caveat:** our pipeline never sees his tour frames, which have no images, so the values are our encounter's (our tracker's `track_conf` at the event was 1.0 for everyone).
+- **Result:** measures and events were identical to Level 1 B in **60/60 runs** (3 scenarios × 20 seeds).
+- **Not a no-op:** a check of one run's frame lines showed our cluster ids and age fields in place of his `c1`–`c4`.
+- **Why there is no effect:** his loop never reads frame `age_class`, `age_conf` or `cluster_id`, and reads `track_conf` only against the 0.6 floor (PROFILE_FORMAT.md §2).
+
+**Bug found and fixed along the way (`05466ac`).** `GroupTracker.update` numbered clusters by iterating a `set`, so the `group_N` *labels* (never the membership) changed with Python's per-process hash seed. Now it iterates in sorted order. A new test runs a 4-group scene under five hash seeds, and `results.md` is now byte-identical under another hash seed.
+
 **What this can and cannot show.** It shows how our start impression's choices change Joey's loop on his scripted, rule-based visitors. It shows nothing about real visitors or real-camera clustering of real groups. The fake scene is my construction, and the age effects can only show up where his scenarios contain the behaviour the seeds gate.
 
 ## Not moved (stays in Jay's repo)
@@ -516,4 +525,6 @@ Every commit ran `python3 run_tests.py` (99 passed, with system Python and in a 
   - **Takes, 2026-11-17:** a setup check; take 1a (fired; JSON lost to a harness error); take 1b (fired, `si.json` only); take 2 (aborted); take 2b (no event). Two-person take 3 was not run. Details are below.
 - **`--out` fix** (`0d8ba64`): a failed `--out` write now prints the impression to stdout and exits 2, with no fallback file. New test.
 - **Profile format** (`4e3640c`): `PROFILE_FORMAT.md`.
-- **Part 3, Level 1** (this commit): `perception/integration/run_in_scenario.py`, `results.md` and `tests/test_integration.py`. Every check passed: 99 tests in `run_tests.py` (both venvs) and 93 perception tests.
+- **Part 3, Level 1** (`8daf4a1`): `perception/integration/run_in_scenario.py`, `results.md` and `tests/test_integration.py`.
+- **Cluster-label determinism fix** (`05466ac`): one new test.
+- **Part 3, Level 2 check** (this commit): `perception/integration/level2_check.py`; 60/60 runs identical to Level 1 B. Every check passed: 99 tests in `run_tests.py` (both venvs), 94 perception tests (33 passed and 5 skipped in the pytest-only venv).

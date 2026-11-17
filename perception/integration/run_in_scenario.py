@@ -113,18 +113,19 @@ def our_impression(his_si, bands, seed):
 
     def on_frame(t, enc, ev):
         if ev is not None:
-            at_event.update({pid: cam.his_id_for(r["box"]) for pid, r in enc.latest.items()})
+            at_event.update({pid: (cam.his_id_for(r["box"]), r["track_conf"]) for pid, r in enc.latest.items()})
 
     si = Encounter(cam, cam.detect).run(cam.frames(), on_frame)
     if si is None:
         raise RuntimeError(f"no engagement event in the fake scene (seed {seed})")
-    mapped = [at_event[v["track_id"]] for v in si["visitors"]]
+    mapped = [at_event[v["track_id"]][0] for v in si["visitors"]]
+    track_conf = {at_event[v["track_id"]][0]: at_event[v["track_id"]][1] for v in si["visitors"]}
     if len(set(mapped)) != len(mapped):
         raise RuntimeError(f"id mapping not one-to-one: {mapped}")
     for v, his in zip(si["visitors"], mapped):
         v["track_id"] = his
     notes = {"t_event": si["t"], "missing": sorted({p[0] for p in people} - set(mapped)),
-             "clusters": {v["track_id"]: v["cluster_id"] for v in si["visitors"]}}
+             "clusters": {v["track_id"]: v["cluster_id"] for v in si["visitors"]}, "track_conf": track_conf}
     schema.validate_start_impression(si)
     return si, notes
 
