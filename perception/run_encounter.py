@@ -3,7 +3,8 @@
   python3 -m perception.run_encounter --source fake            # scripted, deterministic (used by the tests)
   python3 -m perception.run_encounter --source webcam [--camera 0] [--max-s 120] [--out si.json] [--show]
 
-Exit code 0 with an impression, 1 if no engagement event happened before the frames ran out.
+Exit code 0 with an impression, 1 if no engagement event happened before the frames ran out, 2 if --out could not be
+written (the impression is then printed to stdout instead; no other file is written).
 """
 
 from __future__ import annotations
@@ -180,8 +181,13 @@ def main(argv=None) -> int:
         return 1
     line = json.dumps(si, separators=(",", ":"))
     if args.out:
-        with open(args.out, "w") as f:
-            f.write(line + "\n")
+        try:
+            with open(args.out, "w") as f:
+                f.write(line + "\n")
+        except OSError as e:                     # don't lose an impression already built; no fallback file
+            print(f"could not write --out {args.out}: {e}; the impression follows on stdout", file=sys.stderr)
+            print(line)
+            return 2
     else:
         print(line)
     return 0

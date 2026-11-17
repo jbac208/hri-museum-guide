@@ -171,6 +171,19 @@ def test_full_run_in_an_empty_folder_writes_only_the_requested_output(tmp_path):
     schema.validate_start_impression(json.loads((work / "si.json").read_text()))
 
 
+def test_unwritable_out_prints_the_impression_and_exits_2_without_writing_anything(tmp_path):
+    work = tmp_path / "work"
+    work.mkdir()
+    env = {**os.environ, "PYTHONPATH": REPO, "PYTHONDONTWRITEBYTECODE": "1"}
+    r = subprocess.run([sys.executable, "-m", "perception.run_encounter", "--source", "fake",
+                        "--out", str(tmp_path / "gone" / "si.json")],             # parent folder does not exist
+                       cwd=work, env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 2 and "could not write --out" in r.stderr
+    assert len(r.stdout.splitlines()) == 1
+    schema.validate_start_impression(json.loads(r.stdout))
+    assert [f for _, _, fs in os.walk(tmp_path) for f in fs] == []                # no fallback file anywhere
+
+
 def test_stdout_mode_prints_one_valid_json_line():
     r = subprocess.run([sys.executable, "-m", "perception.run_encounter", "--source", "fake"], cwd=REPO,
                        capture_output=True, text=True, timeout=60)

@@ -30,7 +30,7 @@ python3 -m perception.run_encounter --source webcam --camera 0     # MTCNN + Fac
 ```
 
 - **Output:** one JSON line on stdout, or in `--out`. Pipe it through `python3 -m json.tool` to read it.
-- **Exit code:** 1 if no engagement event happened.
+- **Exit code:** 1 if no engagement event happened; 2 if `--out` could not be written. In that case the impression goes to stdout instead, and no other file is written.
 - **Webcam progress:** one status line per second on stderr. It shows `fired=yes/no`, the raw MTCNN faces before `filter_faces` (`raw=N[ratios]`), and for each tracked face its band, streak, track confidence, box ratio, gate, cluster and engagement state. The run ends by printing the highest box ratio per visitor and the highest raw ratio.
 - **Live view:** `--show` opens a window with the boxes and states; `q` stops the take. Nothing is written.
 - **The fake scene:** an adult, a teenager (band `unsure`) and a child with a smaller face walk up together. There is also a poster face (dropped by `filter_faces`) and a face seen in one frame only (never passes the gate).
@@ -38,7 +38,7 @@ python3 -m perception.run_encounter --source webcam --camera 0     # MTCNN + Fac
 ## Tests
 
 ```
-python3 -m pytest perception/tests     # 85 tests; files needing numpy skip cleanly without it
+python3 -m pytest perception/tests     # 86 tests; files needing numpy skip cleanly without it
 python3 run_tests.py                   # Joey's 99 tests, unchanged; never sees perception/tests
 ```
 
@@ -69,7 +69,6 @@ Both commands were also run in clean venvs:
 
 **Known issues, not fixed:**
 - **Near-field passer-by false trigger.** A passer-by walking slowly through the near field triggers engagement every time (Jay's simulator: `passer_by_near` 1.00). On the webcam at ~1 fps one crossing did not fire, but only because 20 frames lasted ~20 s. The fix is a speed or stillness gate plus a new simulator run.
-- **A failed `--out` write loses the impression.** If writing `--out` fails (for example, the folder is gone), the run crashes after building the impression, and it is lost (take 1a).
 - **A walking person can split into two ids** (take 2b; inferred).
 
 ## Webcam run (H), 2026-11-17
@@ -158,7 +157,7 @@ This take started from Jay's terminal at the same moment as a second `take.sh ta
 - **23–34 s:** no face, and the count reset.
 - **35.6 s, back in view:** the face got the **same id, `visitor_1`**, so embedding re-association worked on the real camera after ~10 s away. It counted as stable at once (the gate stays passed for the encounter). The cluster settled again as `group_2`.
 - **52.9 s:** `fired=yes`, `group_known`, solo, adult 0.72, ratio 0.22.
-- **Then:** writing `--out` failed with `FileNotFoundError` because the directory was gone, and the impression was lost. That is a harness error, not a perception error, but it exposed a real gap: a failed `--out` write loses an already-built impression (not fixed).
+- **Then:** writing `--out` failed with `FileNotFoundError` because the directory was gone, and the impression was lost. That is a harness error, not a perception error, but it exposed a real gap: a failed `--out` write lost an already-built impression. Fixed afterwards: the impression now goes to stdout with exit code 2.
 
 Nothing was written anywhere by the run: the torch cache and the repo were untouched, and the only files written in that window were Slack's and YouTube Music's. `take.sh` now refuses to start while the camera is busy and never deletes a folder that has files in it.
 
