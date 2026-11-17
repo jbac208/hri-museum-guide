@@ -38,7 +38,7 @@ python3 -m perception.run_encounter --source webcam --camera 0     # MTCNN + Fac
 ## Tests
 
 ```
-python3 -m pytest perception/tests     # 86 tests; files needing numpy skip cleanly without it
+python3 -m pytest perception/tests     # 93 tests; files needing numpy skip cleanly without it
 python3 run_tests.py                   # Joey's 99 tests, unchanged; never sees perception/tests
 ```
 
@@ -419,6 +419,68 @@ no engagement event; no start_impression
 
 </details>
 
+## Our start impression inside Joey's scenarios (Part 3, Level 1)
+
+```
+python3 -m perception.integration.run_in_scenario --seeds 20 --out perception/integration/results.md   # ~2.5 min
+```
+
+Test scaffolding in `perception/integration/`, not product code.
+
+**What the script does, for each scenario and seed:**
+1. It builds a fake encounter scene from Joey's six visitors and runs our real `Encounter` on it.
+2. It maps our ids to his (`visitor_k` → `vN`) by matching boxes at the event. That mapping exists only here.
+3. It swaps his `start_impression` line for ours, and then his own code runs:
+   - **s1_one_stop (open loop):** his stream comes from `sdc.mock.generate`, with line 2 replaced. `SignalLayer` and `eval_signals.evaluate` then run on it.
+   - **s1_closed and s2_multi_stop (closed loop):** `sdc.sim.Sim.start_lines` is replaced inside this process only and restored in a `finally`. His `run_closed_loop` and `run_tour` then run with the same factories as `compare_policies.run_s1` / `run_s2` (policy `ours`).
+4. Tables are formatted with his `compare_policies.row` / `summarise` / `table`.
+
+No file under `sdc/`, `data/` or his root scripts is edited, and no threshold changed.
+
+**Tests** (`perception/tests/test_integration.py`):
+- Condition A reproduces `compare_policies.run_s1` / `run_s2` and the unspliced open-loop events exactly. A check confirmed the equality fails for B.
+- `start_lines` is restored even when the run raises.
+- Our impression covers exactly his six visitors and validates.
+
+**Fake-scene assumptions.** These are my choices, and they decide our clusters:
+- **Frame:** 1280 × 400 px.
+- **Order:** left to right in his visitor order (v1…v6). Companions are adjacent in that order: c1 = v1, c2 = v2 + v3, c3 = v4, c4 = v5 + v6.
+- **Face size:** adults 80 px wide (height = 1.2 × width). **The child's face is 0.85 × an adult's.**
+- **Spacing:** **companions 0.3 face widths apart, clusters 2.5 face widths apart.** Our clustering joins faces within 1.5 widths.
+- **Movement:** everyone walks up together (faces grow from 0.5× to full size in 3 s), then stands still.
+- **Embeddings:** seeded per person, with small per-frame noise.
+- **Age estimator outputs:** adult (0.05, 0.93, 0.02), child (0.88, 0.08, 0.04), unsure (0.20, 0.35, 0.45), each with ±0.03 seeded jitter.
+
+**Conditions** (20 seeds each, all three scenarios):
+
+| Condition | Start impression |
+|---|---|
+| **A** | his own |
+| **B** | ours, ages right |
+| **C-v1, C-v3, C-v4, C-v5, C-v6** | ours, that adult read as a child |
+| **C2** | ours, the child v2 read as an adult |
+| **D** | ours, v2 unsure |
+| **D-all** | ours, all six unsure |
+| **B+his distance_m**, **B+his cluster_id** (diagnostics) | B with that one field copied back per visitor, to split effect (i) |
+
+**Results** (full tables and per-visitor events in `perception/integration/results.md`):
+
+- **(i) Placeholder seeds and clusters, B vs A:**
+  - **s1_one_stop and s1_closed: v2 (the excluded child) is detected later.**
+    - Open loop: excluded latency 3.6 s → 11.5 s; bid latency 3.6 s → 13.1 s, with 12 extra unlabelled bid detections over 20 seeds (bid precision 1 → 0.72 [0.33–1.00]).
+    - Closed loop: v2's first bid/excluded moves from 53.6 s to 62.0 s (+8.4 s); exclusion episodes 2 → 1.90 [1–2]; time to resolve 2.38 → 2.50 [2.00–4.00]. P13 stays 0.
+  - **s2_multi_stop: no difference at all.**
+  - **The cause is the placeholder `distance_m`, not our clusters.** With his distances copied back, every measure and every per-visitor event equals A. With his clusters copied back, nothing changes compared with B.
+  - **Mechanism, read from the event reasons:** v2 starts 3.0 m from the exhibit, but our seed says 2.2 m and counts as 30 s of observation. When v2 edges in at 50–60 s, the move isn't "closer than own baseline", so the edging-in bid that fires at 53–54 s in A is missed. The bid then comes from the glance cue (56–57 s) or only from being talked over (73 s, seed 3).
+  - **Why s2 shows nothing:** in s2, v2 starts *inside* the formation, so the seed only sets the in-formation baseline. The excluded episode at stop 2 uses an unseeded out-of-formation baseline.
+- **(ii) Age errors, C-\* and C2 vs B: no visitor's events differ in any scenario, and every measure is identical.** The glance seed does reach his loop (v2's own glance baseline is 3.5/min in B, 2.8 in C2). But v2's glance burst is 12/min, far above `GLANCE_RATE_FACTOR` (1.5) × either, so `GLANCE_MIN_SHORT` = 2 short glances in 10 s decides the timing. Adults never produce glance bids in these scenarios.
+- **(iii) Unsure, D and D-all vs B: no difference anywhere,** for the same reason.
+- **Our clusters at the event split his companion pairs.** In all 540 encounters the result was the same: v1 and v4 got known groups, but v2, v3, v5 and v6 got `solo_…` clusters.
+  - **Why:** the event fires when the first visitor's group is known. Lone visitors are known after `stable_s` (1.5 s), but pairs need `together_s` (3 s), so the impression, which is a snapshot at the first event, never contains a pair.
+  - **Effect:** his loop's measures didn't change, because a cluster only sets which way the robot faces for an addition. But it is a real limitation of taking the snapshot at the first event. Not changed.
+
+**What this can and cannot show.** It shows how our start impression's choices change Joey's loop on his scripted, rule-based visitors. It shows nothing about real visitors or real-camera clustering of real groups. The fake scene is my construction, and the age effects can only show up where his scenarios contain the behaviour the seeds gate.
+
 ## Not moved (stays in Jay's repo)
 
 - **The knowledge-graph profile and its wrappers:** `profile.py`, `profile_api.py`, `profile_extraction.py`, `profiling_policy.py`. Joey's repo has no knowledge graph; its profile store is `sdc/profile.py`.
@@ -452,3 +514,6 @@ Every commit ran `python3 run_tests.py` (99 passed, with system Python and in a 
 - **H, webcam run:**
   - **Progress output:** `86fee25` added `fired=` and the max ratio printed at exit; `a59cf54` added `--show`; `a3653fd` added the raw MTCNN faces (`raw=`). All three change display only; no threshold changed.
   - **Takes, 2026-11-17:** a setup check; take 1a (fired; JSON lost to a harness error); take 1b (fired, `si.json` only); take 2 (aborted); take 2b (no event). Two-person take 3 was not run. Details are below.
+- **`--out` fix** (`0d8ba64`): a failed `--out` write now prints the impression to stdout and exits 2, with no fallback file. New test.
+- **Profile format** (`4e3640c`): `PROFILE_FORMAT.md`.
+- **Part 3, Level 1** (this commit): `perception/integration/run_in_scenario.py`, `results.md` and `tests/test_integration.py`. Every check passed: 99 tests in `run_tests.py` (both venvs) and 93 perception tests.
