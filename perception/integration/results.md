@@ -8,11 +8,11 @@ Effects, kept apart: (i) our placeholder seeds and clusters = **B vs A**; (ii) a
 
 ## Our encounter on the fake scene
 
-Seed 1, condition B: event at t = 3.9 s; missing from our impression: nobody; our clusters: {'v1': 'group_3', 'v3': 'solo_visitor_2', 'v4': 'group_4', 'v5': 'solo_visitor_4', 'v6': 'solo_visitor_5', 'v2': 'solo_visitor_6'} (his: v1 c1 · v2, v3 c2 · v4 c3 · v5, v6 c4).
+Seed 1, condition B: event at t = 3.9 s; missing from our impression: nobody; our clusters: {'v1': 'group_1', 'v3': 'solo_visitor_2', 'v4': 'group_3', 'v5': 'solo_visitor_4', 'v6': 'solo_visitor_5', 'v2': 'solo_visitor_6'} (his: v1 c1 · v2, v3 c2 · v4 c3 · v5, v6 c4).
 
 Across all 660 encounters: visitors ever missing: none; distinct cluster assignments: 1.
 
-- assignment 1: {'v1': 'group_3', 'v2': 'solo_visitor_6', 'v3': 'solo_visitor_2', 'v4': 'group_4', 'v5': 'solo_visitor_4', 'v6': 'solo_visitor_5'}
+- assignment 1: {'v1': 'group_1', 'v2': 'solo_visitor_6', 'v3': 'solo_visitor_2', 'v4': 'group_3', 'v5': 'solo_visitor_4', 'v6': 'solo_visitor_5'}
 
 ## s1_one_stop: signal layer vs labels (open loop)
 

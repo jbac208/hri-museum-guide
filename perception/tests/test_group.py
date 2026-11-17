@@ -144,3 +144,16 @@ def test_a_group_arriving_together_is_never_reported_as_a_known_solo_first():
         final = s.run(s.t + 0.1)
         solo_known |= any(c.status == "known" and c.group_size == 1 for c in final.values())
     assert not solo_known and final["visitor_1"].group_size == 3 and final["visitor_1"].has_child_band_member is True
+
+
+def test_group_ids_do_not_depend_on_the_hash_seed():
+    """Group numbering must not follow set iteration order (which changes with PYTHONHASHSEED per process)."""
+    import os, subprocess, sys
+    code = ("from perception.tests.test_group import Scene, still\n"
+            "tracks = {f'visitor_{i}': ('adult', still(x), 0.0) for i, x in enumerate([50, 120, 400, 470, 800, 870, 1200], 1)}\n"
+            "print(sorted(Scene(tracks).run(8.0).items()))")
+    repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    outs = {subprocess.run([sys.executable, "-c", code], cwd=repo, capture_output=True, text=True, check=True,
+                           env={**os.environ, "PYTHONHASHSEED": h, "PYTHONDONTWRITEBYTECODE": "1"}).stdout
+            for h in ("1", "2", "3", "4", "5")}
+    assert len(outs) == 1, outs

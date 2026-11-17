@@ -155,7 +155,7 @@ class GroupTracker:
         for a, b in together:
             parent[find(a)] = find(b)
         comps: Dict[str, set] = {}
-        for p in cand:
+        for p in sorted(cand):                    # sorted: set order follows the per-process string hash seed
             comps.setdefault(find(p), set()).add(p)
         components = list(comps.values())
         # identity of groups across frames
