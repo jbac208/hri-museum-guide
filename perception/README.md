@@ -38,7 +38,7 @@ python3 -m perception.run_encounter --source webcam --camera 0     # MTCNN + Fac
 ## Tests
 
 ```
-python3 -m pytest perception/tests     # 95 tests; files needing numpy skip cleanly without it
+python3 -m pytest perception/tests     # 109 tests; files needing numpy skip cleanly without it
 python3 run_tests.py                   # Joey's 99 tests, unchanged; never sees perception/tests
 ```
 
@@ -492,6 +492,24 @@ No file under `sdc/`, `data/` or his root scripts is edited, and no threshold ch
 
 **What this can and cannot show.** It shows how our start impression's choices change Joey's loop on his scripted, rule-based visitors. It shows nothing about real visitors or real-camera clustering of real groups. The fake scene is my construction, and the age effects can only show up where his scenarios contain the behaviour the seeds gate.
 
+## Encounter phase in the simulation and replay (`jay/encounter-sim`)
+
+Plan, decisions and deviations: `perception/ENCOUNTER_PLAN.md`. Code: `perception/encounter_sim/`. Nothing in `sdc/`, `data/` or Joey's root scripts was edited; `viz/replay_template.html` was (additive; old replays render identically, see below).
+
+```
+python3 -m perception.encounter_sim.replay --captions        # replay/s2_multi_stop_encounter.html from the recorded LLM run
+python3 -m perception.encounter_sim.replay --llm fake        # same, deterministic stand-in LLM
+python3 -m perception.encounter_sim.video                    # replay/s2_multi_stop_encounter.mp4 (draft video, ~4 min to render)
+python3 -m perception.encounter_sim.check --seeds 20 --out perception/encounter_sim/check.md   # F, ~30 s
+```
+
+- **What happens.** Joey's six s2 visitors walk up to the robot at stop 1 before his tour (t < 0). Our real perception code runs on a simulated camera (scripted face boxes, scripted age-estimator outputs): ids, stable gate, age band, companion clusters, engagement event. The robot waits until the group has gathered, greets everyone, asks at most 2 menu questions to the group, thanks them and hands over one `start_impression` at t = 0; his tour then runs unchanged.
+- **Ids** are his ids by construction (arrival order + tracker `id_fmt "v{}"`); the run fails if they are not. **Clusters** are taken at the handoff (all four correct), not at the event (split).
+- **LLM.** Local Ollama `qwen2.5:7b`, recorded once to `perception/encounter_sim/recorded/` and replayed (a changed prompt raises). It picks the next question id and extracts answers; code checks everything. In the recorded run it filed "Short is fine." as wanting the full story (verbatim quote, valid option); that is why the guard also requires the quote to name the option, and it now drops those two items.
+- **Simulated answers** are templates over his hidden interests (truthful by construction); talkativeness is ours (`scene.TALK`, invented; v4 never answers).
+- **Check (F).** With the conversation's layers, 8/20 seeds take the compass instead of the ship model at stop 2, uptake 0.72 → 0.62, misread 0 → 0.10, P13 0 in both, no extra non-routine robot actions toward v4. Mechanism (seed 1): a depth layer wins one of stop 1's two addition slots (P11) and displaces the ship-model preview that confirms v5's interest, so D1 picks another stop. His s2 scripts assume his route, so part of the drop is script mismatch. Without the layers the tour equals his exactly (tested).
+- **Old replays unchanged:** the same records for `s1_one_stop`, `s1_closed` and `s2_multi_stop` built into the committed template (`git show HEAD:viz/replay_template.html`) and the edited one, rendered in headless Chrome (fresh profile, 1400×1100, light theme) at t = 0, 50, 160, 300: the header, controls, map, legend, timeline and every panel are identical (12/12). Window size matters (the timeline scales to it), so both sides must use the same.
+
 ## Not moved (stays in Jay's repo)
 
 - **The knowledge-graph profile and its wrappers:** `profile.py`, `profile_api.py`, `profile_extraction.py`, `profiling_policy.py`. Joey's repo has no knowledge graph; its profile store is `sdc/profile.py`.
@@ -532,3 +550,4 @@ Every commit ran `python3 run_tests.py` (99 passed, with system Python and in a 
 - **Part 3, Level 2 check** (`1247448`): `perception/integration/level2_check.py`; 60/60 runs identical to Level 1 B. Every check passed: 99 tests in `run_tests.py` (both venvs), 94 perception tests (33 passed and 5 skipped in the pytest-only venv).
 - **FINDINGS.md** (`82e89d2`): one page for the paper.
 - **Distance error sweep** (this commit): `perception/integration/distance_sweep.py`, `distance_sweep.md`, one new test, a FINDINGS.md section. Every check passed: 99 tests in `run_tests.py` (both venvs), 95 perception tests (33 passed and 5 skipped in the pytest-only venv).
+- **Encounter phase** (`jay/encounter-sim`, this commit): `perception/encounter_sim/` (scene, dialogue, llm, run, replay, video, check), `ENCOUNTER_PLAN.md`, tracker `id_fmt`, additive template edit, 14 new tests. Every check passed: 99 tests in `run_tests.py` (system Python and the venv with nothing installed), 109 perception tests (42 passed and 6 skipped in the pytest-only venv, run with `PYTHONPATH` unset so ROS's pytest plugin stays out).

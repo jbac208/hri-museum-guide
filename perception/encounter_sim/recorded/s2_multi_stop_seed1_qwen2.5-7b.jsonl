@@ -1,0 +1,7 @@
+{"key": "771e1181e88c33f0a66c02d672f65c8fbf8c10b5ffec3309e874d21c691c416f", "model": "qwen2.5:7b", "raw": "{\"next\": \"depth\"}"}
+{"key": "fa32adf51d950bc45b95d7828e00a30d9ca3cb31a890d91e18d3194ba54c81dd", "model": "qwen2.5:7b", "raw": "{\"layers\": [{\"kind\": \"depth\", \"target\": \"figurehead\", \"confidence\": 0.8, \"quote\": \"Short is fine.\"}]}"}
+{"key": "fa32adf51d950bc45b95d7828e00a30d9ca3cb31a890d91e18d3194ba54c81dd", "model": "qwen2.5:7b", "raw": "{\"layers\": [{\"kind\": \"depth\", \"target\": \"figurehead\", \"confidence\": 0.8, \"quote\": \"Short is fine.\"}]}"}
+{"key": "0e5bc52521149c0f04cd19a161569c65d1b0ec5971f887dc5b95ea9ae1229dbc", "model": "qwen2.5:7b", "raw": "{\"layers\": [{\"kind\": \"depth\", \"target\": \"figurehead\", \"confidence\": 1, \"quote\": \"The full story, please.\"}]}"}
+{"key": "7f477d1de5f7cdc02d7c89c41e866e5fd25328824c961cc153ac74a629ff8c9b", "model": "qwen2.5:7b", "raw": "{\"next\": \"features\"}"}
+{"key": "4a7cdfe62c367a000e080baac323096deb37f89556c2443c9e3dc6a4a9f41322", "model": "qwen2.5:7b", "raw": "{\"layers\": [{\"kind\": \"feature_interest\", \"target\": \"figurehead.paint\", \"confidence\": 1, \"quote\": \"The original paint!\"}]}"}
+{"key": "3aad8fe85d3f7138493f4e7e556aad0b4fead066d6c43c07d0accfd9a2886fc6", "model": "qwen2.5:7b", "raw": "{\"layers\": []}"}

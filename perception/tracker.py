@@ -20,6 +20,7 @@ DEFAULTS = {
     "track_iou": 0.3, "track_max_missed": 30,
     "reid_min_cos": 0.6, "reid_gap": 0.1, "reid_ttl": 300, "iou_weight": 0.3, "overlap_ambiguous": 0.2,
     "match_margin": 0.15, "conf_ambiguous": 0.2, "conf_recover": 0.2, "new_track_conf": 0.6,
+    "id_fmt": "visitor_{}",          # the encounter sim uses "v{}" so its ids are the tour's ids
 }
 
 
@@ -74,7 +75,7 @@ class VisitTracker:
 
     def _new(self, det: Detection, conf: Optional[float] = None) -> str:
         self._n += 1
-        tid = f"visitor_{self._n}"
+        tid = self._c["id_fmt"].format(self._n)
         self._tracks[tid] = {"box": det.box, "missed": 0, "streak": 1,
                              "emb": None if det.emb is None else _unit(det.emb),
                              "conf": self._c["new_track_conf"] if conf is None else conf}

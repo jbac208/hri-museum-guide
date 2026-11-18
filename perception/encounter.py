@@ -11,6 +11,7 @@ See perception/INTERFACE_NOTES.md for what each would take to measure.
 
 from __future__ import annotations
 
+import re
 from typing import Callable, Iterable, Optional
 
 from sdc import schema
@@ -71,7 +72,7 @@ def build_start_impression(t: float, results: list, context: Callable[[str], Gro
 
 
 def _num(pid: str) -> int:
-    return int(pid.rsplit("_", 1)[1])
+    return int(re.search(r"(\d+)$", pid).group(1))
 
 
 class Encounter:
