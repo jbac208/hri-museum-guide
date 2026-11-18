@@ -57,3 +57,15 @@ def test_spliced_closed_loop_stream_validates_and_carries_our_impression():
     with R.replaced_start_impression(R.maker({}, 1, notes)):
         m, _ = R.run_s1_closed(1)                                # run_closed_loop validates every line and the stream
     assert notes and notes[0]["missing"] == [] and m["type"] == "measures"
+
+
+def test_distance_sweep_true_equals_a_and_bias_reaches_every_visitor():
+    from perception.integration import distance_sweep as D
+    conds = D.conditions()
+    res_a, ev_a = R.run_s1_open(D.maker(conds["A"], 3, []), 3)
+    res_t, ev_t = R.run_s1_open(D.maker(conds["true"], 3, []), 3)
+    assert [e.as_dict() for e in ev_t] == [e.as_dict() for e in ev_a]
+    applied = []
+    R.run_s1_open(D.maker(conds["-0.3 m"], 3, applied), 3)
+    assert sorted(t for t, _, _ in applied) == sorted(R.PEOPLE_AGES)
+    assert all(abs(s - (d - 0.3)) < 1e-6 for _, d, s in applied)

@@ -38,7 +38,7 @@ python3 -m perception.run_encounter --source webcam --camera 0     # MTCNN + Fac
 ## Tests
 
 ```
-python3 -m pytest perception/tests     # 94 tests; files needing numpy skip cleanly without it
+python3 -m pytest perception/tests     # 95 tests; files needing numpy skip cleanly without it
 python3 run_tests.py                   # Joey's 99 tests, unchanged; never sees perception/tests
 ```
 
@@ -488,6 +488,8 @@ No file under `sdc/`, `data/` or his root scripts is edited, and no threshold ch
 
 **Bug found and fixed along the way (`05466ac`).** `GroupTracker.update` numbered clusters by iterating a `set`, so the `group_N` *labels* (never the membership) changed with Python's per-process hash seed. Now it iterates in sorted order. A new test runs a 4-group scene under five hash seeds, and `results.md` is now byte-identical under another hash seed.
 
+**Distance error sweep** (simulation only): `python3 -m perception.integration.distance_sweep --seeds 20 --out perception/integration/distance_sweep.md` (~2.5 min). Our impression with his true `distance_m` copied in, plus a bias of ±0.1/±0.3/±0.5 m or random error (std 0.3 m) on every visitor. Results and reading: FINDINGS.md. No webcam distance module was built, and no frame geometry is produced.
+
 **What this can and cannot show.** It shows how our start impression's choices change Joey's loop on his scripted, rule-based visitors. It shows nothing about real visitors or real-camera clustering of real groups. The fake scene is my construction, and the age effects can only show up where his scenarios contain the behaviour the seeds gate.
 
 ## Not moved (stays in Jay's repo)
@@ -527,4 +529,6 @@ Every commit ran `python3 run_tests.py` (99 passed, with system Python and in a 
 - **Profile format** (`4e3640c`): `PROFILE_FORMAT.md`.
 - **Part 3, Level 1** (`8daf4a1`): `perception/integration/run_in_scenario.py`, `results.md` and `tests/test_integration.py`.
 - **Cluster-label determinism fix** (`05466ac`): one new test.
-- **Part 3, Level 2 check** (this commit): `perception/integration/level2_check.py`; 60/60 runs identical to Level 1 B. Every check passed: 99 tests in `run_tests.py` (both venvs), 94 perception tests (33 passed and 5 skipped in the pytest-only venv).
+- **Part 3, Level 2 check** (`1247448`): `perception/integration/level2_check.py`; 60/60 runs identical to Level 1 B. Every check passed: 99 tests in `run_tests.py` (both venvs), 94 perception tests (33 passed and 5 skipped in the pytest-only venv).
+- **FINDINGS.md** (`82e89d2`): one page for the paper.
+- **Distance error sweep** (this commit): `perception/integration/distance_sweep.py`, `distance_sweep.md`, one new test, a FINDINGS.md section. Every check passed: 99 tests in `run_tests.py` (both venvs), 95 perception tests (33 passed and 5 skipped in the pytest-only venv).
