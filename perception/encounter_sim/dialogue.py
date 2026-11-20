@@ -25,8 +25,41 @@ from sdc.content import LAYER_KINDS, SINGLING_OUT
 BUDGET = 2
 CONFIDENCE_MIN = 0.6          # from Jay's frozen modules/kg_extraction.py; untuned placeholder
 MAX_ITEMS = 2
-GREETING = "Hello, everyone, and welcome! I'll be your guide around the gallery today."   # frozen neutral_group row
+GREETING = "Hello, everyone, and welcome! I'll be your guide on your museum tour today."   # the frozen neutral_group row, reworded ("around the gallery") at Jay's request
+INTRO = "I'm the guide robot for your museum tour, and I'll take you round a few of our exhibits."
 ACK = "Thank you, that helps."
+LEAD = "Let's head over to the {}. Please follow me."      # {} = the first exhibit's name
+
+
+# Icebreakers: a fixed script before the LLM's questions (no LLM call: the LLM prompts, and so the recorded run, stay as they were).
+# Said to the group (D7). Each reaction fits any answer: the robot never judges how someone's day is going (no mood inference) nor
+# says who has been before. What the answers give: ice_visit -> a per-visitor "prior tour" fact (keywords, closed set); ice_day -> nothing
+# (rapport only); ice_fav -> pending exhibit_interest layers, through the same name check as the LLM's items.
+ICE_VISIT = "Before we start: have any of you been on a museum tour before?"
+ICE_DAY = "And how is your day going so far?"
+ICE_FAV = "Do you have a favourite exhibit in this museum, or have you seen any of them before?"
+ICE_REACT = {"ice_visit": "Lovely. Whether it's your first tour or your fifth, I hope you find something new today.",
+             "ice_day": "Thank you for sharing. I hope the tour adds something to it.",
+             "ice_fav": "Thank you, I'll keep that in mind."}
+ICE = (("ice_visit", ICE_VISIT), ("ice_day", ICE_DAY), ("ice_fav", ICE_FAV))
+
+
+def prior_tour(text):
+    """'yes' / 'no' / None from a closed set of keywords on the answer to ICE_VISIT (None = unclear: nothing stored)."""
+    low = text.lower()
+    if any(w in low for w in ("first", "never", "no,", "no.", "not yet")):
+        return "no"
+    if any(w in low for w in ("yes", "a few", "been on", "before", "once", "twice")):
+        return "yes"
+    return None
+
+
+def favourite(gallery, text):
+    """[('exhibit_interest', id)] for each exhibit whose name (or id words) the answer to ICE_FAV names; at most MAX_ITEMS."""
+    low = text.lower()
+    hits = [("exhibit_interest", e["id"]) for e in gallery["exhibits"]
+            if any(c in low for c in (e["name"].lower(), e["id"].replace("_", " ")))]
+    return hits[:MAX_ITEMS]
 
 
 @dataclass(frozen=True)
@@ -162,6 +195,25 @@ def extract(llm, q, text):
 
 
 # ---------------------------------------------------------------- simulated replies (no LLM): hidden truth + templates
+
+def ice_replies(qid, visitors, names, rng, max_answers=3):
+    """Simulated answers to an icebreaker. visitors: [(track_id, talk probability, been_before, hidden favourite id or None)].
+    The reserved visitor (p = 0) never answers. -> [(track_id, text)]."""
+    out = []
+    for tid, p, been, fav in visitors:
+        if rng.random() >= p:
+            continue
+        if qid == "ice_visit":
+            text = rng.choice(("Yes, I've been on a few.", "Yes, a couple of times.")) if been else rng.choice(
+                ("No, this is my first one.", "No, never before."))
+        elif qid == "ice_day":
+            text = rng.choice(("Pretty good, thanks!", "Good, we've been looking forward to this.", "Busy, but good."))
+        else:
+            text = f"I like the {names[fav]}." if fav else rng.choice(("Not really, I'm new here.", "Not sure yet."))
+        out.append((tid, text))
+    rng.shuffle(out)
+    return out[:max_answers]
+
 
 def replies(q, visitors, names, rng, max_answers=3):
     """visitors: [(track_id, talk probability, hidden interests {(kind, target)})]. Who answers is a seeded draw on

@@ -65,6 +65,9 @@ td.w { font-variant-numeric: tabular-nums; color: var(--muted); width: 4.2em; te
 #vsay .who { font-weight: 700; }
 #vsay .kept { color: var(--muted); font-size: 12.5px; }
 #init td.est { color: var(--muted); white-space: nowrap; }
+.chip.enc { border-left: 3px solid #c08552; }
+#plog { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+#plog b { color: var(--ink); font-weight: 600; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
 </style>
 </head>
@@ -92,7 +95,7 @@ td.w { font-variant-numeric: tabular-nums; color: var(--muted); width: 4.2em; te
     <div><div class="label">Time</div><div id="clock">0.0 s</div></div>
     <div><div class="label">Robot says (to the group)</div><div id="say"></div></div>
     <div id="vsaywrap" hidden><div class="label">Visitors say (simulated)</div><div id="vsay"></div></div>
-    <div id="initwrap" hidden><div class="label">Initial profile · from the encounter, handed over at 0 s</div><table id="init"></table></div>
+    <div id="initwrap" hidden><div class="label">Profile · one per visitor: assumed in the encounter, then updated through the tour</div><table id="init"></table><div id="plog"></div></div>
     <div><div class="label">Latest decision</div><div id="last"></div></div>
     <div><div class="label">Profile layers · weight w = 1/(1+λk)</div><table id="layers"></table></div>
     <div><div class="label">Live measures (end of stop)</div><div id="measures"></div></div>
@@ -114,6 +117,7 @@ const tracks = D.tracks, T_END = D.meta.duration_s;
 const T0 = Math.min(0, tracks[0].t), ENC = T0 < 0;      // encounter phase before the tour (t < 0), if any
 const tour0 = tracks.find(r => r.t >= 0) || tracks[0];
 const encNotes = k => D.notes.filter(n => n.note === "encounter: " + k);
+const tourSaid = D.notes.filter(n => n.note === "tour: visitor said"), said = encNotes("answer").concat(tourSaid);
 const answers = encNotes("answer"), handoff = (encNotes("handoff")[0] || {}).visitors || [];
 const captions = D.notes.filter(n => n.note === "caption").sort((a, b) => a.t - b.t);
 const ex = Object.fromEntries(D.gallery.exhibits.map(e => [e.id, e]));
@@ -135,11 +139,13 @@ function trackAt(t) {
   const u = b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 0;
   const bm = Object.fromEntries(b.visitors.map(v => [v.id, v]));
   const ang = (x, y) => { let d = y - x; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return x + u * d; };
-  return { robot: a.robot, visitors: a.visitors.map(v => { const w = bm[v.id] || v;
+  const rI = { x: a.robot.x + u * (b.robot.x - a.robot.x), y: a.robot.y + u * (b.robot.y - a.robot.y), yaw: ang(a.robot.yaw, b.robot.yaw) };
+  return { robot: a.robot, robotI: rI, visitors: a.visitors.map(v => { const w = bm[v.id] || v;
     return { ...v, x: v.x + u * (w.x - v.x), y: v.y + u * (w.y - v.y), head_yaw: ang(v.head_yaw, w.head_yaw), body_yaw: ang(v.body_yaw, w.body_yaw) }; }) };
 }
 
 function robotAt(t) {   // commanded pose: start from the first track, apply turn_body / step_to
+  if (ENC && t < 0) return trackAt(t).robotI;      // encounter: the robot walks and turns continuously (logged pose, interpolated)
   const r = { x: tracks[0].robot.x, y: tracks[0].robot.y, yaw: tracks[0].robot.yaw };
   for (const a of actions) { if (a.t > t) break;
     if (a.kind === "turn_body") r.yaw = a.args.yaw;
@@ -151,9 +157,10 @@ const gazeAt = t => { let g = null; for (const a of actions) { if (a.t > t) brea
 const activeEvents = t => D.events.filter(e => e.t_detect <= t && (e.t1 == null || t < e.t1 || (e.kind === "point_ask" && t < e.t_detect + 2)));
 
 function layersAt(t) {
-  const L = {}, credit = {};
+  const L = {}, credit = {}, enc = {};
   for (const p of D.profile) { if (p.t > t) break;
-    if (p.layer) L[p.layer] = p;
+    if (p.layer && !(p.layer in enc)) enc[p.layer] = String(p.reason).startsWith("from the encounter");
+    if (p.layer) L[p.layer] = Object.assign({}, p, { enc: enc[p.layer] });
     if (p.op === "credit") credit[p.track_id] = p; }
   return { layers: Object.values(L).filter(l => l.op !== "remove"), credit };
 }
@@ -171,11 +178,16 @@ function stopIdAt(t) {
   for (const m of moveNotes) if (m.t <= t && m.t > best) { s = m.to; best = m.t; }
   return s;
 }
+const place = encNotes("place")[0], leaveT = (encNotes("leave")[0] || {}).t;   // encounter: reception furniture, when the walk to stop 1 starts
 const S = 90, ASPECT = 1.3, pad = 0.7;
 // one camera per stop (its exhibit, the group, the robot) and one per move between stops
 const camWins = [];
 stopsList.forEach(w => {
   const mv = moveNotes.find(m => m.t >= w.t0 && m.t < w.t1);
+  if (w.enc && leaveT != null) {        // the encounter: the reception, then the walk to stop 1
+    camWins.push({ t0: w.t0, t1: leaveT, ex: [], lobby: true }, { t0: leaveT, t1: w.t1, ex: [w.stop] });
+    return;
+  }
   camWins.push({ t0: w.t0, t1: mv ? mv.t : w.t1, ex: [w.stop] });
   if (mv) camWins.push({ t0: mv.t, t1: w.t1, ex: [w.stop, mv.to] });
 });
@@ -184,19 +196,20 @@ const views = camWins.map(w => {
   w.ex.forEach(id => { const e = ex[id]; X.push(e.x - e.radius, e.x + e.radius); Y.push(e.y - e.radius, e.y + e.radius); });
   tracks.filter(r => r.t >= w.t0 && r.t < w.t1).forEach(r => { r.visitors.forEach(v => { X.push(v.x); Y.push(v.y); }); X.push(r.robot.x); Y.push(r.robot.y); });
   actions.filter(a => a.kind === "step_to" && a.t >= w.t0 && a.t < w.t1).forEach(a => { X.push(a.args.x); Y.push(a.args.y); });
+  if (w.lobby && place) { X.push(place.desk[0] - place.desk[2] / 2, place.door[0] - place.door[2] / 2, place.door[0] + place.door[2] / 2); Y.push(place.door[1], place.desk[1] + place.desk[3] / 2); }
   let x0 = Math.min(...X) - pad, x1 = Math.max(...X) + pad, y0 = Math.min(...Y) - pad, y1 = Math.max(...Y) + pad;
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   let w_ = x1 - x0, h_ = y1 - y0;
   if (w_ / h_ < ASPECT) w_ = h_ * ASPECT; else h_ = w_ / ASPECT;
-  return { minX: cx - w_ / 2, maxX: cx + w_ / 2, minY: cy - h_ / 2, maxY: cy + h_ / 2 };
+  return { minX: cx - w_ / 2, maxX: cx + w_ / 2, minY: cy - h_ / 2, maxY: cy + h_ / 2, lobby: !!w.lobby };
 });
-let minX, maxX, minY, maxY, W, H;
+let minX, maxX, minY, maxY, W, H, inLobby;
 const px = x => ((x - minX) * S).toFixed(1), py = y => ((maxY - y) * S).toFixed(1);
 const map = document.getElementById("map");
 function setView(t) {
   let i = 0;
   camWins.forEach((w, j) => { if (w.t0 <= t) i = j; });
-  ({ minX, maxX, minY, maxY } = views[i]);
+  ({ minX, maxX, minY, maxY } = views[i]); inLobby = views[i].lobby;
   W = (maxX - minX) * S; H = (maxY - minY) * S;
   map.setAttribute("viewBox", `0 0 ${W.toFixed(0)} ${H.toFixed(0)}`);
 }
@@ -225,7 +238,8 @@ function drawMap(t) {
   // exhibits + features
   const inView = e => e.x >= minX && e.x <= maxX && e.y >= minY && e.y <= maxY;
   let nl = 0, nr = 0;
-  for (const e of D.gallery.exhibits.filter(e => !inView(e))) {   // off-map: pinned to a top corner
+  if (inLobby) s += `<text x="${W / 2}" y="22" text-anchor="middle" font-size="12" font-weight="600" fill="${MAP_INK}">↑ gallery: ${stop.name} <tspan font-weight="400" fill="${MAP_MUTED}">${Math.hypot(stop.x - place.desk[0], stop.y - place.desk[1]).toFixed(0)} m</tspan></text>`;
+  for (const e of D.gallery.exhibits.filter(e => !inView(e) && !inLobby)) {   // off-map: pinned to a top corner
     const right = e.x > stop.x, row = right ? nr++ : nl++, y = 22 + row * 18;
     const d = Math.hypot(e.x - stop.x, e.y - stop.y).toFixed(1);
     const x = right ? W - 12 : 12;
@@ -236,6 +250,13 @@ function drawMap(t) {
     s += `<circle cx="${px(e.x)}" cy="${py(e.y)}" r="${(e.radius * S).toFixed(1)}" fill="${cur ? "#efe6d2" : "#f0eeea"}" stroke="${cur ? "#b08d4a" : "#c9c4ba"}" stroke-width="1.5"/>`;
     s += `<text x="${px(e.x)}" y="${(+py(e.y) - e.radius * S - 6).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="600" fill="${MAP_INK}">${e.name}</text>`;
     for (const f of e.features) s += `<rect x="${(+px(f.x) - 3).toFixed(1)}" y="${(+py(f.y) - 3).toFixed(1)}" width="6" height="6" transform="rotate(45 ${px(f.x)} ${py(f.y)})" fill="#b08d4a"><title>${f.name}</title></rect>`;
+  }
+  if (ENC && place) {   // reception desk and entrance (encounter only)
+    const [dx, dy, dw, dh] = place.desk, [ox, oy, ow] = place.door;
+    s += `<rect x="${px(dx - dw / 2)}" y="${py(dy + dh / 2)}" width="${(dw * S).toFixed(1)}" height="${(dh * S).toFixed(1)}" rx="5" fill="#e9dfcf" stroke="#b08d4a" stroke-width="1.5"/>`;
+    s += `<text x="${px(dx)}" y="${(+py(dy + dh / 2) - 6).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="600" fill="${MAP_INK}">Reception</text>`;
+    s += `<line x1="${px(ox - ow / 2)}" y1="${py(oy)}" x2="${px(ox + ow / 2)}" y2="${py(oy)}" stroke="#8a867d" stroke-width="5" stroke-linecap="round"/>`;
+    s += `<text x="${px(ox)}" y="${(+py(oy) - 8).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="600" fill="${MAP_MUTED}">Entrance</text>`;
   }
   // blocked line of sight
   for (const v of vis) if (!v.los_exhibit)
@@ -303,23 +324,31 @@ function drawPanel(t) {
   }).join("");
 }
 function drawEncounter(t) {
-  const cur = answers.find(a => a.t <= t && t < a.t + a.duration_s + 1.5);
+  const cur = said.find(a => a.t <= t && t < a.t + a.duration_s + 1.5);
   document.getElementById("vsay").innerHTML = cur
-    ? `<span class="who" style="color:${colorOf(cur.track_id)}">${cur.track_id}</span> "${esc(cur.text)}"<div class="kept">kept: ${cur.layers.length ? cur.layers.map(esc).join(", ") : "nothing"}${cur.dropped.length ? " · dropped: " + cur.dropped.map(esc).join(", ") : ""}</div>`
+    ? `<span class="who" style="color:${colorOf(cur.track_id)}">${cur.track_id}</span> "${esc(cur.text)}"${cur.layers ? `<div class="kept">kept: ${cur.layers.length ? cur.layers.map(esc).join(", ") : "nothing"}${cur.dropped.length ? " · dropped: " + cur.dropped.map(esc).join(", ") : ""}</div>` : ""}`
     : `<span style="color:var(--muted)">(quiet)</span>`;
   const fr = trackAt(Math.min(t, -0.01)), live = Object.fromEntries(fr.visitors.map(v => [v.id, v]));
   const ho = Object.fromEntries(handoff.map(v => [v.track_id, v]));
   const groupOf = id => t >= 0 ? (ho[id] || {}).cluster_id : (live[id] && live[id].group_status === "known" ? live[id].cluster : null);
+  const { layers, credit } = layersAt(t);
+  const priorOf = id => t >= 0 ? (ho[id] || {}).prior_tour : (answers.filter(a => a.track_id === id && a.t + a.duration_s <= t).flatMap(a => a.layers)
+    .map(l => l.startsWith("prior tour: ") ? (l.endsWith("yes") ? "yes" : "no") : null).filter(Boolean)[0]);
   document.getElementById("init").innerHTML = visitorIds.map(id => {
     const v = live[id] || {}, h = ho[id] || {};
-    if (t < 0 && v.detected === false) return `<tr><td class="id" style="color:var(--muted)">${id}</td><td colspan="3" style="color:var(--muted)">not yet detected</td></tr>`;
+    if (t < 0 && v.detected === false) return `<tr><td class="id" style="color:var(--muted)">${id}</td><td colspan="4" style="color:var(--muted)">not yet detected</td></tr>`;
     const band = t >= 0 ? `${h.age_band} ${(+h.age_conf).toFixed(2)}` : `${v.age_band} ${(+v.age_conf).toFixed(2)}`;
     const g = groupOf(id), mates = g ? visitorIds.filter(o => o !== id && groupOf(o) === g) : null;
     const who = g == null ? "group: settling" : mates.length ? "with " + mates.join(", ") : "alone";
-    const lay = answers.filter(a => a.track_id === id && a.t + a.duration_s <= t).flatMap(a => a.layers);
-    const chips = [...new Set(lay)].map(l => `<span class="chip pending">${esc(l.replace("_interest", ""))}</span>`).join("");
-    return `<tr><td class="id" style="color:${colorOf(id)}">${id}</td><td class="est" title="age band: internal estimate, never spoken; only seeds baselines (D4)">${esc(band)}</td><td>${who}</td><td>${chips || '<span style="color:var(--muted)">—</span>'}</td></tr>`;
+    const pt = priorOf(id), prior = pt ? ` · ${pt === "yes" ? "done tours" : "first tour"}` : "";
+    const chips = layers.filter(l => l.track_id === id).map(l =>
+      `<span class="chip ${l.status}${l.enc ? " enc" : ""}" title="${esc((l.enc ? "from the encounter · " : "") + l.reason)}">${l.kind.replace("_interest", "")}: ${esc(l.target)}</span>`).join("");
+    const w = credit[id] ? credit[id].weight.toFixed(2) : "1.00";
+    return `<tr><td class="id" style="color:${colorOf(id)}">${id}</td><td class="est" title="age band: internal estimate, never spoken; only seeds baselines (D4)">${esc(band)}</td><td>${who}${prior}</td><td>${chips || '<span style="color:var(--muted)">—</span>'}</td><td class="w">w ${w}</td></tr>`;
   }).join("");
+  const ops = D.profile.filter(p => p.t <= t && p.layer && p.op !== "credit").slice(-4).reverse();
+  document.getElementById("plog").innerHTML = ops.length ? "Profile updates: " + ops.map(p =>
+    `<b>${p.t.toFixed(0)} s</b> ${p.track_id} ${p.op === "create" ? "+" : p.op} ${p.kind.replace("_interest", "")}: ${esc(p.target)}`).join(" · ") : "";
 }
 const a2s = a => a.kind === "say_to_group" ? "" : a.kind === "gaze_at" ? `→ ${esc(a.args.target)}` :
   a.kind === "turn_body" ? `yaw ${a.args.yaw}` : a.kind === "step_to" ? `(${a.args.x}, ${a.args.y})` : a.kind === "pause" ? `${a.args.s} s` : "";
@@ -383,8 +412,8 @@ function drawTimeline() {
     }
     for (const n of D.notes.filter(n => n.track_id === id && ["uptake", "no uptake"].includes(n.note)))
       s += `<text data-tip="${esc(n.t.toFixed(1) + " s · " + n.note + " after " + n.addition + (n.why ? ": " + n.why : ""))}" x="${tx(n.t)}" y="${y + 15}" text-anchor="middle" font-size="13" font-weight="700" fill="${n.note === "uptake" ? "#2a9d6a" : "#999"}">${n.note === "uptake" ? "✓" : "✗"}</text>`;
-    for (const a of answers.filter(a => a.track_id === id))
-      s += `<rect data-tip="${esc(a.t.toFixed(1) + " s · [sim] says \"" + a.text + "\" → kept: " + (a.layers.join(", ") || "nothing"))}" x="${tx(a.t)}" y="${y + 6}" width="${Math.max(3, tx(a.t + a.duration_s) - tx(a.t))}" height="${LANE - 12}" rx="2" fill="${SAY.enc}" opacity=".85"/>`;
+    for (const a of said.filter(a => a.track_id === id))
+      s += `<rect data-tip="${esc(a.t.toFixed(1) + " s · [sim] says \"" + a.text + "\"" + (a.layers ? " → kept: " + (a.layers.join(", ") || "nothing") : ""))}" x="${tx(a.t)}" y="${y + 6}" width="${Math.max(3, tx(a.t + a.duration_s) - tx(a.t))}" height="${LANE - 12}" rx="2" fill="${SAY.enc}" opacity=".85"/>`;
     for (const n of encNotes("detected").filter(n => n.track_id === id))
       s += `<text data-tip="${esc(n.t.toFixed(1) + " s · detected: " + n.why)}" x="${tx(n.t)}" y="${y + 15}" text-anchor="middle" font-size="12" fill="var(--muted)">▸</text>`;
     if (showSim) for (const r of (D.sim || []).filter(r => r.track_id === id))
@@ -441,10 +470,10 @@ document.getElementById("sub").textContent =
 document.getElementById("legend").innerHTML =
   Object.entries(KIND).map(([k, c]) => `<span><i style="background:${c}"></i>${k.replace("_", "/")}</span>`).join("") +
   Object.entries({ "core": SAY.core, "addition": SAY.add, "answer": SAY.qa }).map(([k, c]) => `<span><i style="background:${c}"></i>robot: ${k}</span>`).join("") +
-  (ENC ? `<span><i style="background:${SAY.enc}"></i>encounter: robot / visitor speech</span><span><b>- - ○</b> companion cluster (perception)</span><span>child/adult 0.88 = age band, internal estimate, never spoken, seeds baselines only (D4)</span><span><i style="background:#e6e4df;border:1px solid #b9b6ae"></i>not yet detected</span><span>▸ detected</span>` : "") +
+  (ENC ? `<span><i style="background:${SAY.enc}"></i>encounter: robot / visitor speech</span><span><b>- - ○</b> companion cluster (perception)</span><span>child/adult 0.88 = age band, internal estimate, never spoken, seeds baselines only (D4)</span><span><i style="background:#e6e4df;border:1px solid #b9b6ae"></i>not yet detected</span><span>▸ detected</span><span><i style="background:#eee;border-left:3px solid #c08552"></i>profile guess said in the encounter</span>` : "") +
   `<span><i style="background:#d9e6f5"></i>viewing formation</span><span>filled = in formation</span><span><b style="color:#e76f51">- -</b> view blocked</span><span><b style="color:#2f6fdf">—</b> robot gaze</span><span><b style="color:#d62828">|</b> exclusion fix</span><span><b style="color:#2a9d6a">✓</b>/<b style="color:#999">✗</b> uptake / none</span><span>○ sim reaction</span>`;
 const startT = +(new URLSearchParams(location.search).get("t") ?? T0);
-if (ENC) { document.getElementById("vsaywrap").hidden = false; document.getElementById("initwrap").hidden = false; }
+if (ENC) { document.getElementById("vsaywrap").hidden = false; document.getElementById("initwrap").hidden = false; document.getElementById("layers").parentElement.hidden = true; }
 if (captions.length) document.getElementById("caption").hidden = false;
 drawTimeline(); drawMeasures(); seek(startT);
 </script>

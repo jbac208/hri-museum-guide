@@ -2,8 +2,11 @@
 
     python3 -m perception.encounter_sim.video [--llm replay|fake] [--fps 10] [--out replay/s2_multi_stop_encounter.mp4]
 
-Speeds (plan G): the encounter at 1x, stop 1 at 4x, 2x from 10 s before to 15 s after the first exclusion fix, the rest
-at 8x; captions on. Needs google-chrome and ffmpeg (both already on this machine); no network. Frames go to a temp dir.
+The encounter ends with the small talk and a continuous walk to stop 1 (no cut; `--tour-questions` adds the LLM's two questions
+about the tour before the walk). Speeds: all speech at 1x (the encounter, and each line of the tour with a second before and after); the silent stretches of the
+tour at 4x. Captions on. Sound (gTTS, see audio.py) for every line: the robot's, the encounter's simulated answers and the
+simulated visitors' questions in the tour. Needs google-chrome and ffmpeg (already on this machine); gTTS needs the network the
+first time a line is rendered (cached after). Frames go to a temp dir.
 """
 
 from __future__ import annotations
@@ -16,36 +19,71 @@ import subprocess
 import sys
 import tempfile
 import threading
+from bisect import bisect_left
 
 import make_replay
 
+from . import audio
 from .llm import FakeLLM, ReplayLLM
 from .replay import captions, recording_path
 from .run import run
 
 SIZE = (1440, 1260)
+LEAD_S, TAIL_S, QUIET_X = 1.0, 1.0, 4.0     # around each line / the speed-up between lines in the tour
 _local = threading.local()      # one Chrome profile per worker thread: Chrome refuses a profile already in use
 
 
+def speech_events(records):
+    """[(t0, t1, text, who)] for every line shown as speech: the robot's say_to_group (encounter and tour), the encounter's simulated
+    answers and the simulated visitors' questions in the tour (his scenario's own text)."""
+    out = [(r["t"], r["t"] + r["duration_s"], r["args"]["text"], "robot") for r in records
+           if r["type"] == "action" and r["kind"] == "say_to_group"]
+    out += [(r["t"], r["t"] + r["duration_s"], r["text"], r["track_id"]) for r in records
+            if r["type"] == "note" and r["note"] in ("encounter: answer", "tour: visitor said")]
+    return sorted(out)
+
+
 def schedule(records, fps):
-    """Sim times of the frames: list of t."""
+    """Sim times of the frames: list of t. Speech plays at 1x (lead-in and tail around each line, so it is never cut); the encounter
+    is all 1x; the rest of the tour runs at QUIET_X (speed-up of the silent stretches; 8x after stop 2 outside any speech)."""
     t0 = min(r["t"] for r in records if r["type"] == "track")
     t_end = records[-1]["t"] if records[-1]["type"] == "measures" else max(r["t"] for r in records)
-    stop2 = next((r["t"] for r in records if r["type"] == "note" and r["note"] == "transition start"), t_end)
-    fix = next((r["t"] for r in sorted(records, key=lambda r: r["t"]) if r["type"] == "action"
-                and r["reason"].startswith("excluded")), None)
-    spans = [(t0, 0.0, 1.0), (0.0, stop2, 4.0)]
-    if fix is not None and fix > stop2:
-        spans += [(stop2, fix - 10, 8.0), (fix - 10, fix + 15, 2.0), (fix + 15, t_end, 8.0)]
-    else:
-        spans += [(stop2, t_end, 8.0)]
-    ts = []
-    for a, b, speed in spans:
-        t = a
-        while t < b:
-            ts.append(round(t, 2))
-            t += speed / fps
+    win = [(a - LEAD_S, b + TAIL_S) for a, b, _, _ in speech_events(records)]
+    ts, t = [], t0
+    while t < t_end:
+        ts.append(round(t, 2))
+        slow = t < 0 or any(a <= t <= b for a, b in win)
+        t += (1.0 if slow else QUIET_X) / fps
     return ts + [t_end]
+
+
+def at_1x(ts, fps, a, b):
+    """Video time (s) at which sim time a falls, if [a, b] lies inside a stretch played at 1x; else None."""
+    i, j = bisect_left(ts, a - 1e-6), bisect_left(ts, b - 1e-6)
+    if j >= len(ts) or any(abs(ts[k + 1] - ts[k] - 1 / fps) > 0.011 for k in range(i, j)):
+        return None
+    return i / fps - (ts[i] - a)
+
+
+def soundtrack(records, ts, fps, tmp):
+    """-> (wav path, report) for every spoken line."""
+    ho = next(r for r in records if r["type"] == "note" and r["note"] == "encounter: handoff")
+    voice = audio.voices([(v["track_id"], v["age_class"]) for v in ho["visitors"]])
+    voice["robot"] = audio.ROBOT
+    events, late, skipped = [], [], 0
+    for n, (a, b, text, who) in enumerate(speech_events(records)):
+        off = at_1x(ts, fps, a, b)
+        if off is None:
+            skipped += 1
+            continue
+        p = os.path.join(tmp, f"s{n:03d}.wav")
+        d, fits = audio.say(text, voice[who], b - a, p)
+        events.append((max(off, 0.0), p))
+        if not fits:
+            late.append(f"{who} at {a:.1f} s: {d:.1f} s of audio for a {b - a:.1f} s slot")
+    out = os.path.join(tmp, "speech.wav")
+    audio.mix(events, len(ts) / fps, out)
+    return out, f"{len(events)} lines with sound, {skipped} not at 1x left silent, {len(late)} too long for their slot" + "".join("; " + x for x in late)
 
 
 def shoot(html, t, path, tmp):
@@ -66,10 +104,12 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--fps", type=int, default=10)
     ap.add_argument("--jobs", type=int, default=8)
+    ap.add_argument("--no-audio", action="store_true")
+    ap.add_argument("--tour-questions", action="store_true", help="the LLM's two questions about the tour between the small talk and the walk (default: walk right after the small talk)")
     ap.add_argument("--out", default=os.path.join(make_replay.HERE, "replay", "s2_multi_stop_encounter.mp4"))
     a = ap.parse_args(argv)
-    llm = FakeLLM() if a.llm == "fake" else ReplayLLM(recording_path("s2_multi_stop", a.seed))
-    records, sim, _ = run("s2_multi_stop", llm=llm, seed=a.seed)
+    llm = FakeLLM() if a.llm == "fake" or not a.tour_questions else ReplayLLM(recording_path("s2_multi_stop", a.seed))
+    records, sim, _ = run("s2_multi_stop", llm=llm, seed=a.seed, tour_questions=a.tour_questions)
     records = records + captions(records)
     ts = schedule(records, a.fps)
     tmp = tempfile.mkdtemp(prefix="encounter_video_")
@@ -83,7 +123,10 @@ def main(argv=None):
                 if n % 100 == 0:
                     print(f"{n}/{len(jobs)} frames", file=sys.stderr)
         os.makedirs(os.path.dirname(a.out), exist_ok=True)
+        wav, report = (None, "no sound") if a.no_audio else soundtrack(records, ts, a.fps, tmp)
+        print(report, file=sys.stderr)
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(a.fps), "-i", os.path.join(tmp, "f%05d.png"),
+                        *([] if wav is None else ["-i", wav, "-c:a", "aac", "-b:a", "128k", "-shortest"]),
                         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", a.out], check=True)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

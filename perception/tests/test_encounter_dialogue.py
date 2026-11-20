@@ -24,7 +24,8 @@ def test_menu_speech_is_to_the_group_and_closed():
     for q in M:
         assert not SINGLING_OUT.search(q.text)
         assert set(q.cues) == {(k, t) for k, t, _ in q.options}
-    assert not SINGLING_OUT.search(dlg.GREETING) and not SINGLING_OUT.search(dlg.ACK)
+    assert not any(SINGLING_OUT.search(x) for x in (dlg.GREETING, dlg.INTRO, dlg.ACK, dlg.LEAD.format("ship's figurehead"))
+                   + tuple(t for _, t in dlg.ICE) + tuple(dlg.ICE_REACT.values()))
 
 
 def test_extract_keeps_a_grounded_item():
@@ -91,3 +92,17 @@ def test_reserved_visitor_never_answers_and_replies_follow_hidden_interests():
 def test_fake_llm_extracts_through_the_same_guard():
     got, _, _ = dlg.extract(FakeLLM(), Q["open"], "What about the sailor's sea chest?")
     assert got == [("exhibit_interest", "sea_chest")]
+
+
+def test_icebreaker_answers_are_read_by_closed_keyword_sets():
+    assert dlg.prior_tour("No, this is my first one.") == "no" and dlg.prior_tour("Yes, I've been on a few.") == "yes"
+    assert dlg.prior_tour("Hmm, hard to say") is None                                             # unclear: nothing stored
+    assert dlg.favourite(run_tour.GALLERY, "I like the navigator's compass.") == [("exhibit_interest", "compass")]
+    assert dlg.favourite(run_tour.GALLERY, "Not really, I'm new here.") == []                     # no name, no guess
+
+
+def test_reserved_visitor_never_answers_an_icebreaker():
+    vis = [("v3", 0.9, True, "compass"), ("v4", 0.0, False, None)]
+    for seed in range(50):
+        for qid, _ in dlg.ICE:
+            assert "v4" not in dict(dlg.ice_replies(qid, vis, {"compass": "navigator's compass"}, random.Random(seed)))

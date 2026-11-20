@@ -5,7 +5,16 @@ Branch `jay/encounter-sim` (from `jay/perception` at `4ab7e52`). Written 2026-11
 ## Status (2026-11-18): built, apart from F's third condition
 
 - **Built as planned:** sections A to E and G. How to run it: `perception/README.md`, section "Encounter phase in the simulation and replay".
-- **The draft video** (`replay/s2_multi_stop_encounter.mp4`, 127 s, 1440×1260, gitignored) is rendered automatically by `python3 -m perception.encounter_sim.video`, using headless Chrome plus ffmpeg, not a screen capture.
+- **The draft video** (`replay/s2_multi_stop_encounter.mp4`, 127 s, 1440×1260, gitignored) is rendered automatically (with sound since 2026-11-19) by `python3 -m perception.encounter_sim.video`, using headless Chrome plus ffmpeg, not a screen capture.
+
+**Follow-up (2026-11-19), after Jay's request:** the encounter is slower and starts at a reception, not at stop 1.
+- Visitors come in through an entrance at 0.8 m/s (was 1.2), 2.0/2.6 s apart (was 1.5/1.2), and the robot greets after 4 s with no new face (`run.GATHER_S`, was 3).
+- The reception is stop 1's formation moved 7 m south (`scene.RECEPTION`). After the lead-in ("Let's head over to the ship's figurehead. Please follow me.", `dialogue.LEAD`) the robot walks to its stop-1 spot at 0.7 m/s and the visitors follow; the handoff is at the end of that walk, so t = 0 starts the tour as before. About 74 s in all.
+- The video has speech sound (gTTS, `audio.py`; online, cached) for every line, encounter and tour (speech at 1x, silent stretches at 4x).
+- Companion groups appear step by step as perception settles them (`encounter: cluster update` notes), all settled before the greeting. **Open:** also using conversation as a cluster signal (Jay's suggestion, 2026-11-19); not built, needs a design decision (see Jay's decisions in the reply of that day: privacy and D4).
+- Visitors are lively in the encounter (`scene.Gaze`, his sim's noise), as in the tour.
+- **Follow-up 2 (2026-11-19):** a welcome, an introduction and three icebreaker questions (tour before? day? favourite exhibit?) before the LLM's questions (`dialogue.ICE`, scripted, no LLM); one profile per visitor shown from the encounter through the tour (seeded layers dated when said); sound for the whole tour, including the simulated visitors' questions (his scenario's text, added as `tour: visitor said` notes). **Open:** nothing in his tour reads `prior_tour`; his decision code would have to (his call, not edited here).
+- **Follow-up 3 (2026-11-20):** "museum tour" wording (greeting, intro, favourite question; the LLM menu's open question still says "gallery": changing it needs a re-recording). The robot leads the group to the figurehead straight after the small talk; the LLM's two tour questions are off by default (`--tour-questions`). Encounter about 114 s. **Open:** the only seeded guess (v3 compass) is never tested by his tour (pending layers score 0.15, see README).
 
 **Changes from the plan below, found while building:**
 1. **When the robot greets.** The engagement event fires for the first arrival alone (v1, about 9 s before the group is complete). So the robot greets only once:
@@ -18,8 +27,8 @@ Branch `jay/encounter-sim` (from `jay/perception` at `4ab7e52`). Written 2026-11
 3. **A guard rule added after the first real-LLM run.** `qwen2.5:7b` filed "Short is fine." under the only depth option ("the full story"), with a verbatim quote and confidence 0.8, for two visitors. A quote must now also *name* the option: its name, its id, or a listed paraphrase (`dialogue._cues`). The recorded run's error is caught and shown in the replay ("dropped: depth:figurehead (quote_does_not_name_it)").
 4. **Two recording runs, 14 local calls in all.** The extra run was needed because the next-question prompt includes what has been learned so far, and that changed once the guard dropped the bad items. The first recording is not in the repo.
 5. **F was run now** (`perception/encounter_sim/check.md`), with two conditions; the third (wrong extractions) was not. With the conversation's layers:
-   - 8/20 seeds go to the compass instead of the ship model at stop 2;
-   - uptake 0.72 → 0.62, misread 0 → 0.10;
+   - 8/20 seeds go to the compass instead of the ship model at stop 2 (14/20 after follow-up 2 added the icebreakers' favourite-exhibit layers);
+   - uptake 0.72 → 0.62, misread 0 → 0.10 (0.72 → 0.58 and 0 → 0.12 after follow-up 2);
    - P13 0 in both;
    - no extra non-routine robot actions toward v4.
 
