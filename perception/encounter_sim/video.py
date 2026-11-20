@@ -25,10 +25,11 @@ import make_replay
 
 from . import audio
 from .llm import FakeLLM, ReplayLLM
-from .replay import captions, recording_path
+from .replay import captions, recording_path, with_diagram
 from .run import run
 
 SIZE = (1440, 1260)
+SIZE_DIAGRAM = (1440, 1440)                 # taller page: the system diagram sits between the map and the timeline
 LEAD_S, TAIL_S, QUIET_X = 1.0, 1.0, 4.0     # around each line / the speed-up between lines in the tour
 _local = threading.local()      # one Chrome profile per worker thread: Chrome refuses a profile already in use
 
@@ -86,12 +87,12 @@ def soundtrack(records, ts, fps, tmp):
     return out, f"{len(events)} lines with sound, {skipped} not at 1x left silent, {len(late)} too long for their slot" + "".join("; " + x for x in late)
 
 
-def shoot(html, t, path, tmp):
+def shoot(html, t, path, tmp, size=SIZE):
     if not hasattr(_local, "profile"):
         _local.profile = tempfile.mkdtemp(prefix="prof", dir=tmp)
     profile = _local.profile
     subprocess.run(["google-chrome", "--headless=new", "--disable-gpu", "--no-first-run", f"--user-data-dir={profile}",
-                    f"--window-size={SIZE[0]},{SIZE[1]}", "--hide-scrollbars",
+                    f"--window-size={size[0]},{size[1]}", "--hide-scrollbars",
                     "--blink-settings=preferredColorScheme=1",     # light theme in every frame (fresh profiles vary) "--virtual-time-budget=2000",
                     f"--screenshot={path}", f"file://{html}?t={t}"], capture_output=True, timeout=120, check=True,
                    # Chrome puts its singleton socket under TMPDIR; a long TMPDIR overflows the socket path and it aborts
@@ -105,6 +106,7 @@ def main(argv=None):
     ap.add_argument("--fps", type=int, default=10)
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--no-audio", action="store_true")
+    ap.add_argument("--no-diagram", action="store_true", help="without the system diagram under the map")
     ap.add_argument("--tour-questions", action="store_true", help="the LLM's two questions about the tour between the small talk and the walk (default: walk right after the small talk)")
     ap.add_argument("--out", default=os.path.join(make_replay.HERE, "replay", "s2_multi_stop_encounter.mp4"))
     a = ap.parse_args(argv)
@@ -116,8 +118,10 @@ def main(argv=None):
     try:
         html = os.path.join(tmp, "replay.html")
         with open(html, "w") as f:
-            f.write(make_replay.build(records, sim))
-        jobs = [(html, t, os.path.join(tmp, f"f{i:05d}.png"), tmp) for i, t in enumerate(ts)]
+            page = make_replay.build(records, sim)
+            f.write(page if a.no_diagram else with_diagram(page))
+        jobs = [(html, t, os.path.join(tmp, f"f{i:05d}.png"), tmp,
+                 SIZE if a.no_diagram else SIZE_DIAGRAM) for i, t in enumerate(ts)]
         with cf.ThreadPoolExecutor(a.jobs) as ex:
             for n, _ in enumerate(ex.map(lambda j: shoot(*j), jobs), 1):
                 if n % 100 == 0:

@@ -30,3 +30,9 @@ def test_the_robot_walks_to_stop_1_straight_after_the_small_talk():
     assert all(b - a < 0.11 for a, b in zip(ts, ts[1:]) if b < 0) and 0.0 in ts                  # one continuous 1x stretch, no cut
     from perception.encounter_sim.replay import captions
     assert not [c for c in captions(recs) if "Two questions about this tour" in c["text"]]
+
+
+def test_the_system_diagram_is_injected_once_into_the_page():
+    from perception.encounter_sim.replay import with_diagram
+    page = with_diagram("<html><body><script>const D = null;</script></body></html>")
+    assert page.count("function drawSys") == 1 and page.index("drawSys") < page.index("</body>") and page.count("</body>") == 1

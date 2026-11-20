@@ -6,6 +6,7 @@
     python3 -m perception.encounter_sim.replay --llm record         # call local Ollama once and record its outputs (asks the network)
     python3 -m perception.encounter_sim.replay --captions           # add the video captions (G in perception/ENCOUNTER_PLAN.md)
     python3 -m perception.encounter_sim.replay --no-layers          # hand over without the conversation's pending layers
+    python3 -m perception.encounter_sim.replay --no-diagram         # without the system diagram (sysdiag.html) under the map
 
 Open the HTML as usual; without ?t= it starts at the beginning of the encounter (negative time).
 """
@@ -27,6 +28,13 @@ MODEL = "qwen2.5:7b"
 
 def recording_path(name, seed, model=MODEL):
     return os.path.join(RECORDED, f"{name}_seed{seed}_{model.replace(':', '-')}.jsonl")
+
+
+def with_diagram(html):
+    """The built page plus the system diagram (sysdiag.html): which stage is working at the current time."""
+    snippet = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sysdiag.html")).read()
+    assert html.count("</body>") == 1
+    return html.replace("</body>", snippet + "</body>")
 
 
 def captions(records):
@@ -71,6 +79,7 @@ def main(argv=None):
     ap.add_argument("--captions", action="store_true")
     ap.add_argument("--tour-questions", action="store_true", help="the LLM's two questions about the tour before the walk")
     ap.add_argument("--no-layers", action="store_true")
+    ap.add_argument("--no-diagram", action="store_true")
     ap.add_argument("--out")
     a = ap.parse_args(argv)
     path = recording_path(a.scenario, a.seed)
@@ -89,7 +98,8 @@ def main(argv=None):
     out = a.out or os.path.join(make_replay.HERE, "replay", f"{a.scenario}_encounter.html")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w") as f:
-        f.write(make_replay.build(records, sim))
+        html = make_replay.build(records, sim)
+        f.write(html if a.no_diagram else with_diagram(html))
     print(f"wrote {out} ({os.path.getsize(out) // 1024} KB); encounter {info['t_encounter_s']} s, LLM {info['llm_model']}, "
           f"asked {info['asked']}, layers {info['layers']}")
     if a.llm == "record":

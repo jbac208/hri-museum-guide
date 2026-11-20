@@ -1,0 +1,94 @@
+<!-- System diagram for the replay: which stage of the pipeline is working at the current time. Injected by replay.with_diagram()
+     before the closing body tag; reads the page's own data (D, actions, t) and wraps its render(). Joey's template is not edited. -->
+<style>
+#syscard { padding: 8px 10px; margin: 8px 0; }
+#syscard .row { display: flex; align-items: stretch; gap: 4px; margin: 4px 0; }
+#syscard .lane { flex: 0 0 92px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; align-self: center; }
+#syscard .st { flex: 1 1 0; min-width: 0; border: 1.5px solid var(--line); border-radius: 7px; padding: 4px 6px; background: var(--card);
+  transition: background .15s, border-color .15s; }
+#syscard .st b { display: block; font-size: 12px; font-weight: 600; line-height: 1.25; }
+#syscard .st span { display: block; font-size: 11px; color: var(--muted); line-height: 1.3; height: 2.6em; overflow: hidden; }
+#syscard .st.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--card)); }
+#syscard .st.on span { color: var(--ink); }
+#syscard .st.done { border-style: dashed; }
+#syscard .ar { flex: 0 0 auto; align-self: center; color: var(--muted); font-size: 12px; }
+</style>
+<script>
+(() => {
+  const FLASH = 3.0;                      // a point record (an event, a profile change) lights its stage for this long
+  const short = (s, n = 90) => { s = String(s); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+  const notes = D.notes.slice().sort((a, b) => a.t - b.t), evs = (D.events || []).slice().sort((a, b) => a.t - b.t);
+  const prof = (D.profile || []).filter(p => p.layer && p.op !== "credit");
+  const spoke = a => a.t + (a.duration_s || 0);
+  const iv = []; const add = (st, t0, t1, d, pri = 1) => iv.push({ st, t0, t1: Math.max(t1, t0 + 0.5), d, pri });   // pri 0: background, shown only when nothing else is
+  const N = k => notes.filter(n => n.note === k);
+
+  // ---- encounter (ours): perception, then the group conversation, then the walk and the handoff
+  N("encounter: detected").forEach(n => add("detect", n.t, n.t + FLASH, `${n.track_id} tracked: ${n.why}`));
+  if (ENC) tracks.filter(r => r.t < 0).forEach((r, i, a) => { if (i % 5 === 0) {   // age band per detected visitor, every second
+    const vs = r.visitors.filter(v => v.detected && v.age_band);
+    if (vs.length) add("detect", r.t, r.t + 1.0, `tracking ${vs.map(v => v.id).join(", ")}`, 0);
+    if (vs.length) add("age", r.t, r.t + 1.0, vs.map(v => `${v.id} ${v.age_band} ${v.age_conf}`).join(" · ") + " (internal, never spoken)"); } });
+  N("encounter: cluster update").forEach(n => add("cluster", n.t, n.t + FLASH,
+    (n.groups.length ? n.groups.map(g => g.join("+")).join(", ") : "no group yet") + (n.unsettled.length ? ` · settling: ${n.unsettled.join(", ")}` : "")));
+  N("encounter: clusters confirmed").forEach(n => add("cluster", n.t, n.t + FLASH, "every group settled: partition fixed for the handoff"));
+  const eng = N("encounter: engagement")[0], greet = actions.find(a => a.args && a.args.id === "encounter.greet");
+  if (eng) add("engage", eng.t, greet ? greet.t : eng.t + FLASH, `engagement event (${eng.reason}); waiting until everyone has arrived and settled`);
+  actions.filter(a => a.kind === "say_to_group" && String(a.args.id || "").startsWith("encounter.") && a.args.id !== "encounter.lead")
+    .forEach(a => add("talk", a.t, spoke(a) + 0.9, `robot → group: ${a.args.id.replace("encounter.", "")}`));
+  N("encounter: answer").forEach(n => add("talk", n.t, n.t + n.duration_s, `${n.track_id} answers (simulated)`));
+  N("encounter: answer").filter(n => n.layers.length).forEach(n => add("seed", n.t, n.t + 4, `${n.track_id}: ${n.layers.join(", ")} (pending guess)`));
+  N("encounter: question").filter(n => n.how !== "script").forEach(n => add("seed", n.t, n.t + FLASH, `LLM picks the next question: ${n.qid} (${n.how})`));
+  const lead = actions.find(a => a.args && a.args.id === "encounter.lead"), walk = actions.find(a => a.kind === "step_to" && a.t < 0);
+  if (lead) add("lead", lead.t, walk ? 0 : spoke(lead), "invite the group to stop 1, then walk; the group follows");
+  if (ENC) add("handoff", -1.0, 3.0, "start_impression: ids, clusters, child/adult, pending guesses → the tour's profile");
+
+  // ---- tour (Joey's decision loop)
+  evs.forEach(e => add("sense", e.t, e.t + FLASH, `${e.track_id} ${e.kind}: ${e.reason}`));
+  prof.filter(p => p.t >= 0).forEach(p => add("profile", p.t, p.t + FLASH, `${p.track_id} ${p.layer} ${p.op}: ${(p.kind || "").replace("_interest", "")} ${p.target || ""}`));
+  N("addition").forEach(n => add("choose", n.t, n.t + FLASH, `${n.addition} score ${n.score} ≥ threshold`));
+  actions.filter(a => a.kind === "say_to_group" && a.t >= 0).forEach(a => add("speak", a.t, spoke(a), `${sayType(a)}: ${short(a.args.text, 70)}`));
+  N("addition").forEach(n => {
+    const out = notes.find(o => (o.note === "uptake" || o.note === "no uptake") && o.addition === n.addition && o.t >= n.t);
+    const who = Object.keys(n.addressed || {}).join(", ");
+    add("uptake", n.t, out ? out.t : n.t + 20, `watching ${who} for uptake of ${n.addition}`);
+    if (out) add("uptake", out.t, out.t + FLASH, out.note === "uptake" ? `${out.track_id} took it up → ${out.confirmed.join(", ")} confirmed` : `${out.track_id}: no uptake`);
+  });
+  N("exclusion episode start").forEach(n => {
+    const end = notes.find(o => o.note === "exclusion episode resolved" && o.track_id === n.track_id && o.t >= n.t);
+    add("floor", n.t, end ? end.t + 1 : n.t + FLASH, `${n.track_id} excluded (${n.barriers}): open the formation`);
+  });
+  N("question answered").forEach(n => add("floor", n.asked_t, n.t + 1, `${n.track_id} asked: answer (${n.qa}) to the group`));
+  actions.filter(a => a.kind === "pause" && a.t >= 0).forEach(a => add("floor", a.t, a.t + FLASH, short(a.reason)));
+  notes.filter(n => ["plan", "two-way choice read", "falling behind"].includes(n.note)).forEach(n => add("move", n.t, n.t + FLASH,
+    n.note === "plan" ? `next: ${n.next}${n.offer_choice ? ` (offer ${n.choice.join(" or ")})` : ""}` :
+    n.note === "two-way choice read" ? `group turned toward ${n.pick}` : `${n.track_id} falling behind: slow down`));
+  actions.filter(a => a.kind === "step_to" && a.t >= 0).forEach(a => add("move", a.t, spoke(a), `walk to ${a.args.to} at ${a.args.speed} m/s`));
+
+  const ROWS = [
+    ENC && ["Encounter · ours", [["detect", "Detect + track"], ["age", "Child/adult band"], ["cluster", "Companion groups"], ["engage", "Engage + gather"],
+                                 ["talk", "Group talk (D7)"], ["seed", "Profile guesses"], ["lead", "Lead to stop 1"], ["handoff", "Handoff"]]],
+    ["Tour · Joey's loop", [["sense", "Sense signals"], ["profile", "Profile update"], ["choose", "Choose addition"], ["speak", "Speak to group"],
+                            ["uptake", "Uptake window"], ["floor", "Floor + formation"], ["move", "Plan + move"]]],
+  ].filter(Boolean);
+  const card = document.createElement("div");
+  card.className = "card"; card.id = "syscard";
+  card.innerHTML = `<div class="label">System · what is processing now</div>` + ROWS.map(([lane, sts]) =>
+    `<div class="row"><div class="lane">${lane}</div>` + sts.map(([id, name], i) =>
+      `${i ? '<div class="ar">→</div>' : ""}<div class="st" id="st-${id}"><b>${name}</b><span></span></div>`).join("") + `</div>`).join("");
+  document.getElementById("legend").before(card);
+
+  function drawSys(t) {
+    for (const [, sts] of ROWS) for (const [id] of sts) {
+      const el = document.getElementById("st-" + id), mine = iv.filter(x => x.st === id && x.t0 <= t);
+      const on = mine.filter(x => t < x.t1).sort((a, b) => a.pri - b.pri || a.t0 - b.t0), last = on.length ? on[on.length - 1] : mine[mine.length - 1];
+      el.classList.toggle("on", on.length > 0);
+      el.classList.toggle("done", !on.length && !!last && t - last.t1 < 30);
+      el.querySelector("span").textContent = last && (on.length || t - last.t1 < 30) ? short(last.d) : "";
+    }
+  }
+  const base = render;
+  render = function () { base(); drawSys(t); };
+  drawSys(t);
+})();
+</script>
