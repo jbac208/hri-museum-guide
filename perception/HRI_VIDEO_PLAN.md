@@ -28,10 +28,16 @@ times from that run (t = 0 is the start of the tour). The system diagram (on by 
 
 ## Things to settle before rendering
 
-- **Renderer:** `video.py` renders the whole run; cutting these 7 shots needs a segment option (`--shots`) or an editor. Not built yet.
+- **Renderer:** `python3 -m perception.encounter_sim.short` renders a draft of these 7 shots (66 s): gTTS narrator voice-over with the lines as subtitles, system diagram on, simulated speech not voiced; each shot runs at the speed that makes it as long as its narration. Shot 1's line is long (14 s); shorten it to get under 60 s.
 - **Sound:** mute the gTTS voices under the voice-over, or keep them quietly (−18 dB) in shots 2, 3 and 7 where the words matter.
 - **Captions:** off (the voice-over explains); the diagram stays on.
 - **Do not claim:** that v3's compass guess leads to the compass being offered in shot 7. The choice is offered because the two
   options tie at 0 (pending guesses don't count there), and the guess is never tested in this run (see README).
 - **D4:** the child/adult band appears on screen (internal estimate, never spoken). Joey to confirm that is fine for a public video.
 - **Simulation:** say it on screen ("simulated visitors; real perception and decision code").
+
+## Figures (`media/figures/`)
+
+- `perception_system_diagram.png`: Jay's perception + conversation diagram (775×387; a higher-resolution export is needed for print).
+- `ids_clusters_t-94_crop.png`, `ids_clusters_t-94_full.png`: IDs, companion clusters and child/adult band just after the greeting (2× screenshots).
+- `system_diagram_t96.png`: the replay with the system diagram when v5's guess is confirmed.
